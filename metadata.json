@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Assistant",
+  "description": "A clean, modern chat interface for interacting with the Gemini AI model.",
+  "requestFramePermissions": []
+}
