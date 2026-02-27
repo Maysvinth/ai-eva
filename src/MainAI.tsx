@@ -427,37 +427,6 @@ export function MainAI() {
                             <Loader2 size={12} className="animate-spin" /> Waiting for tablet...
                           </span>
                         </div>
-
-                        <div className="relative flex items-center py-2">
-                          <div className="flex-grow border-t border-neutral-800"></div>
-                          <span className="flex-shrink-0 mx-4 text-neutral-500 text-xs font-semibold uppercase tracking-widest">OR</span>
-                          <div className="flex-grow border-t border-neutral-800"></div>
-                        </div>
-
-                        <div className="text-xs text-neutral-400 mb-1 uppercase tracking-widest font-semibold">Enter Tablet Code</div>
-                        <input 
-                          type="text"
-                          value={inputCode}
-                          onChange={(e) => {
-                            let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                            if (val.length > 4) {
-                              val = val.slice(0, 4) + '-' + val.slice(4, 8);
-                            }
-                            setInputCode(val);
-                          }}
-                          placeholder="Enter code from tablet"
-                          maxLength={9}
-                          className="w-full bg-black/50 border border-neutral-800 rounded-lg p-2.5 text-center text-lg tracking-widest font-mono text-white focus:border-cyan-500 focus:outline-none"
-                        />
-                        <div className="flex gap-2 mt-2">
-                          <button 
-                            onClick={() => startPairing(inputCode)}
-                            disabled={inputCode.length < 9}
-                            className="flex-1 py-3 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            CONNECT
-                          </button>
-                        </div>
                       </div>
                     )}
                   </div>

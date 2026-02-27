@@ -12,6 +12,11 @@ export default function App() {
   const [route, setRoute] = useState(window.location.hash);
 
   useEffect(() => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile && window.location.hash !== '#/tablet') {
+      window.location.hash = '#/tablet';
+    }
+
     const handleHashChange = () => setRoute(window.location.hash);
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);

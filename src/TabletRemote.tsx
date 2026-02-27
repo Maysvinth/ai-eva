@@ -2,69 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check } from 'lucide-react';
 
 export function TabletRemote() {
-  const [myDeviceCode, setMyDeviceCode] = useState('');
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
-
-  useEffect(() => {
-    const generatePairingCode = () => {
-      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      const numbers = '0123456789';
-      let c = '';
-      for (let i = 0; i < 4; i++) c += letters.charAt(Math.floor(Math.random() * letters.length));
-      c += '-';
-      for (let i = 0; i < 4; i++) c += numbers.charAt(Math.floor(Math.random() * numbers.length));
-      return c;
-    };
-    
-    const initialCode = generatePairingCode();
-    setMyDeviceCode(initialCode);
-    
-    // Auto-register the tablet's code
-    const wsUrl = window.location.protocol === 'https:' 
-      ? `wss://${window.location.host}/ws` 
-      : `ws://${window.location.host}/ws`;
-      
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'register_device', role: 'tablet', code: initialCode }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'connected') {
-          setStatus('connected');
-        } else if (data.type === 'error') {
-          setStatus('error');
-          setErrorMsg(data.message);
-          ws.close();
-        } else if (data.type === 'disconnected') {
-          setStatus('idle');
-          setErrorMsg('Laptop disconnected');
-        } else if (data.type === 'tablet_command') {
-          handleTabletCommand(data.payload);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    ws.onerror = () => {
-      setStatus('error');
-      setErrorMsg('Connection error');
-    };
-    
-    return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      }
-    };
-  }, []);
 
   const handleTabletCommand = (payload: any) => {
     const { action, target, details } = payload;
@@ -87,8 +28,9 @@ export function TabletRemote() {
     }
   };
 
-  const connect = () => {
-    if (!code || code.length !== 9) {
+  const connect = (codeToUse?: string) => {
+    const finalCode = codeToUse || code;
+    if (!finalCode || finalCode.length !== 9) {
       setErrorMsg('Please enter a valid code (e.g. ABXZ-4821)');
       return;
     }
@@ -105,7 +47,7 @@ export function TabletRemote() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'connect_device', role: 'tablet', code: code.toUpperCase() }));
+      ws.send(JSON.stringify({ type: 'connect_device', role: 'tablet', code: finalCode.toUpperCase() }));
     };
 
     ws.onmessage = (event) => {
@@ -211,19 +153,6 @@ export function TabletRemote() {
         </div>
 
         <div className="w-full flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="text-xs text-neutral-400 uppercase tracking-widest font-semibold text-center">Your Tablet Code</div>
-            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
-              <span className="text-2xl font-mono tracking-widest font-bold text-white">{myDeviceCode || '------'}</span>
-            </div>
-          </div>
-
-          <div className="relative flex items-center py-2">
-            <div className="flex-grow border-t border-neutral-800"></div>
-            <span className="flex-shrink-0 mx-4 text-neutral-500 text-xs font-semibold uppercase tracking-widest">OR</span>
-            <div className="flex-grow border-t border-neutral-800"></div>
-          </div>
-
           <div className="text-xs text-neutral-400 uppercase tracking-widest font-semibold text-center">Enter Laptop Code</div>
           <input 
             type="text"
@@ -234,6 +163,9 @@ export function TabletRemote() {
                 val = val.slice(0, 4) + '-' + val.slice(4, 8);
               }
               setCode(val);
+              if (val.length === 9) {
+                connect(val);
+              }
             }}
             placeholder="ABXZ-4821"
             maxLength={9}
@@ -245,7 +177,7 @@ export function TabletRemote() {
           )}
 
           <button 
-            onClick={connect}
+            onClick={() => connect()}
             disabled={code.length !== 9 || status === 'connecting'}
             className={`w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 ${
               status === 'connecting' 
