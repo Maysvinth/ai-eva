@@ -7,6 +7,23 @@ export function TabletRemote() {
   const [errorMsg, setErrorMsg] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
 
+  const handleTabletCommand = (payload: any) => {
+    const { action, target, details } = payload;
+    if (target === 'YOUTUBE') {
+      if (action === 'PLAY') {
+        window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(details)}`, '_blank');
+      }
+    } else if (target === 'SPOTIFY') {
+      if (action === 'PLAY') {
+        window.open(`https://open.spotify.com/search/${encodeURIComponent(details)}`, '_blank');
+      }
+    } else if (target === 'BROWSER') {
+      if (action === 'OPEN') {
+        window.open(details, '_blank');
+      }
+    }
+  };
+
   const connect = () => {
     if (!code || code.length !== 9) {
       setErrorMsg('Please enter a valid code (e.g. ABXZ-4821)');
@@ -39,6 +56,8 @@ export function TabletRemote() {
         } else if (data.type === 'disconnected') {
           setStatus('idle');
           setErrorMsg('Laptop disconnected');
+        } else if (data.type === 'tablet_command') {
+          handleTabletCommand(data.payload);
         }
       } catch (e) {
         console.error(e);
@@ -153,8 +172,6 @@ export function TabletRemote() {
             className={`w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 ${
               status === 'connecting' 
                 ? 'bg-yellow-500 text-black' 
-                : status === 'connected'
-                ? 'bg-emerald-500 text-black'
                 : status === 'error'
                 ? 'bg-red-500 text-white hover:bg-red-400'
                 : 'bg-cyan-500 hover:bg-cyan-400 disabled:bg-neutral-800 disabled:text-neutral-500 text-black'
@@ -162,8 +179,6 @@ export function TabletRemote() {
           >
             {status === 'connecting' ? (
               <><Loader2 size={20} className="animate-spin" /> Connecting...</>
-            ) : status === 'connected' ? (
-              <><Check size={20} /> Connected</>
             ) : status === 'error' ? (
               'Retry Connection'
             ) : (

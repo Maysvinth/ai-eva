@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Modality, Type } from '@google/genai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import { ANIME_VOICES } from './voices';
 
 let aiInstance: GoogleGenAI | null = null;
@@ -20,6 +20,8 @@ export function useGeminiLive() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [userVolume, setUserVolume] = useState(0);
+  const [companionText, setCompanionText] = useState('');
+  const [sendTabletCommand, setSendTabletCommand] = useState<any>(null);
   
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -48,9 +50,9 @@ export function useGeminiLive() {
       const taskPrompt = localStorage.getItem('taskPrompt') || '';
       const isDeviceConnected = localStorage.getItem('isDeviceConnected') === 'true';
       
-      let finalInstruction = `KNOWLEDGE BASE ENHANCEMENT: You are an advanced AI with a comprehensive, encyclopedic knowledge base covering all aspects of the world. You have deep, expert-level knowledge in global news, world events, video games, anime, pop culture, science, history, technology, geography, and various other topics.\n\nPERSONA INSTRUCTIONS:\n${selectedVoice.instruction}`;
+      let finalInstruction = `KNOWLEDGE BASE ENHANCEMENT: You are an advanced AI with a comprehensive, encyclopedic knowledge base covering all aspects of the world. You have deep, expert-level knowledge in global news, world events, video games, anime, pop culture, science, history, technology, geography, and various other topics.\n\nPERSONA INSTRUCTIONS:\n${selectedVoice.instruction}\n\nYou are an AI assistant with a Pair-Code Device Connection to a secondary tablet.\n\nCONNECTION:\n- The tablet connects using a pairing code.\n- After pairing, the tablet can execute commands instantly.\n- Use only this Pair-Code method.\n- Ignore all previous device connection systems.\n\nCONTROLLED SERVICES (ONLY THESE):\n\n1) YOUTUBE\n2) SPOTIFY\n3) WEBSITES (browser)\n\nWHEN USER REQUESTS ACTIONS ON TABLET:\n\nRespond with a DEVICE COMMAND formatted exactly like this:\n\nDEVICE COMMAND:\nACTION: <ACTION_NAME>\nTARGET: <SERVICE>\nDETAILS: <SEARCH OR URL>\n\nSUPPORTED ACTIONS:\n\nPLAY YOUTUBE VIDEO:\nACTION: PLAY\nTARGET: YOUTUBE\nDETAILS: <video name or search>\n\nPLAY MUSIC:\nACTION: PLAY\nTARGET: SPOTIFY\nDETAILS: <song name / artist>\n\nOPEN WEBSITE:\nACTION: OPEN\nTARGET: BROWSER\nDETAILS: <full URL>\n\nEXAMPLES:\n\nIf user says:\n"Play Believer on my tablet"\n\nDEVICE COMMAND:\nACTION: PLAY\nTARGET: SPOTIFY\nDETAILS: Believer Imagine Dragons\n\nIf user says:\n"Open YouTube on my tablet"\n\nDEVICE COMMAND:\nACTION: PLAY\nTARGET: YOUTUBE\nDETAILS: YouTube Home\n\nIf user says:\n"Open google.com on my tablet"\n\nDEVICE COMMAND:\nACTION: OPEN\nTARGET: BROWSER\nDETAILS: https://www.google.com\n\nRULES:\n\n- Only send DEVICE COMMANDS when the user clearly wants the tablet to do something.\n- Otherwise respond normally as a helpful assistant.\n- Keep commands short for instant execution.\n- Assume zero delay connection.\n\nNORMAL MODE:\n\nFor questions like weather, homework, tech help, etc.\n→ Reply normally with text.\n→ Do NOT send device commands.\n\nGOAL:\n\nAct as a fast remote controller for the paired tablet focused only on YouTube, Spotify, and web browsing while remaining a normal assistant for everything else.`;
       
-      if (isDeviceConnected && taskPrompt.trim()) {
+      if (taskPrompt.trim()) {
         finalInstruction += `\n\nBACKGROUND TASK PROMPT (CRITICAL): ${taskPrompt.trim()}`;
       }
 
@@ -62,46 +64,6 @@ export function useGeminiLive() {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice.voiceName } },
           },
           systemInstruction: finalInstruction,
-          tools: [{
-            functionDeclarations: [
-              {
-                name: 'openApp',
-                description: 'Open an application on the device',
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: { appName: { type: Type.STRING } },
-                  required: ['appName']
-                }
-              },
-              {
-                name: 'playSpotify',
-                description: 'Play music on Spotify',
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: { query: { type: Type.STRING } },
-                  required: ['query']
-                }
-              },
-              {
-                name: 'playYoutube',
-                description: 'Play a video on YouTube',
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: { query: { type: Type.STRING } },
-                  required: ['query']
-                }
-              },
-              {
-                name: 'openWebsite',
-                description: 'Open a website URL',
-                parameters: {
-                  type: Type.OBJECT,
-                  properties: { url: { type: Type.STRING } },
-                  required: ['url']
-                }
-              }
-            ]
-          }],
         },
         callbacks: {
           onopen: () => {
@@ -148,38 +110,51 @@ export function useGeminiLive() {
           onmessage: async (message) => {
             if (localStorage.getItem('useLaptopAudio') === 'false') return;
             
-            // Parse function calls
+            // Parse text output for companion links or device commands
             const parts = message.serverContent?.modelTurn?.parts;
             if (parts) {
               for (const part of parts) {
-                if (part.functionCall) {
-                  const call = part.functionCall;
-                  const args = call.args as any;
-                  
-                  if (call.name === 'openApp') {
-                    console.log('Opening app:', args.appName);
-                  } else if (call.name === 'playSpotify') {
-                    window.open(`https://open.spotify.com/search/${encodeURIComponent(args.query)}`, '_blank');
-                  } else if (call.name === 'playYoutube') {
-                    window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(args.query)}`, '_blank');
-                  } else if (call.name === 'openWebsite') {
-                    let url = args.url;
-                    if (!url.startsWith('http')) url = 'https://' + url;
-                    window.open(url, '_blank');
-                  }
-                  
-                  // Send function response back
-                  sessionPromise.then((session) => {
-                    session.sendToolResponse({
-                      functionResponses: [{
-                        name: call.name,
-                        id: call.id,
-                        response: { result: 'success' }
-                      }]
-                    });
+                if (part.text) {
+                  setCompanionText(prev => {
+                    const newText = prev + part.text;
+                    
+                    // Parse DEVICE COMMAND
+                    if (newText.includes('DEVICE COMMAND:')) {
+                      // Require a newline after details, or wait for turnComplete
+                      const match = newText.match(/DEVICE COMMAND:\nACTION: (.*?)\nTARGET: (.*?)\nDETAILS: (.*?)(?:\n|$)/);
+                      if (match && (newText.endsWith('\n') || message.serverContent?.turnComplete)) {
+                        const [_, action, target, details] = match;
+                        setSendTabletCommand({ action: action.trim(), target: target.trim(), details: details.trim() });
+                        return ''; // Clear after sending
+                      }
+                    }
+                    
+                    // Auto-open links if they are clearly labeled
+                    if (newText.includes('OPEN ON TABLET:')) {
+                      const urlMatch = newText.match(/https?:\/\/[^\s]+/);
+                      if (urlMatch && (newText.endsWith('\n') || newText.endsWith(' ') || message.serverContent?.turnComplete)) {
+                        window.open(urlMatch[0], '_blank');
+                        return ''; // Clear after opening
+                      }
+                    }
+                    return newText;
                   });
                 }
               }
+            }
+            
+            if (message.serverContent?.turnComplete) {
+              setCompanionText(prev => {
+                if (prev.includes('DEVICE COMMAND:')) {
+                  const match = prev.match(/DEVICE COMMAND:\nACTION: (.*?)\nTARGET: (.*?)\nDETAILS: (.*?)(?:\n|$)/);
+                  if (match) {
+                    const [_, action, target, details] = match;
+                    setSendTabletCommand({ action: action.trim(), target: target.trim(), details: details.trim() });
+                    return '';
+                  }
+                }
+                return prev;
+              });
             }
             
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
@@ -288,6 +263,9 @@ export function useGeminiLive() {
     isAiSpeaking,
     userVolume,
     isUserSpeaking: userVolume > 0.02,
+    companionText,
+    setCompanionText,
+    sendTabletCommand,
     connect,
     disconnect
   };

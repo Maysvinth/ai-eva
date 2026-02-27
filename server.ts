@@ -70,6 +70,13 @@ async function startServer() {
             laptopWs.send(JSON.stringify({ type: 'command', payload: data.payload }));
           }
         }
+        else if (data.type === 'tablet_command') {
+          // Laptop sending command to tablet
+          const tabletWs = activeConnections.get(ws);
+          if (tabletWs && tabletWs.readyState === WebSocket.OPEN) {
+            tabletWs.send(JSON.stringify({ type: 'tablet_command', payload: data.payload }));
+          }
+        }
         else if (data.type === 'status') {
           // Laptop sending status to tablet
           const tabletWs = activeConnections.get(ws);

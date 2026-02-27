@@ -14,7 +14,7 @@ const generatePairingCode = () => {
 };
 
 export function MainAI() {
-  const { isConnected, isConnecting, isAiSpeaking, userVolume, isUserSpeaking, connect, disconnect } = useGeminiLive();
+  const { isConnected, isConnecting, isAiSpeaking, userVolume, isUserSpeaking, companionText, setCompanionText, connect, disconnect, sendTabletCommand } = useGeminiLive();
 
   const [pos, setPos] = useState({ x: 24, y: 24 });
   const dragRef = useRef({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
@@ -110,6 +110,15 @@ export function MainAI() {
       if (wsRef.current) wsRef.current.close();
     };
   }, []);
+
+  useEffect(() => {
+    if (sendTabletCommand && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'tablet_command',
+        payload: sendTabletCommand
+      }));
+    }
+  }, [sendTabletCommand]);
 
   const handleVoiceSelect = (id: string) => {
     setSelectedVoiceId(id);
@@ -439,47 +448,6 @@ export function MainAI() {
                 </div>
               </div>
 
-              {/* Device Voice Control Section */}
-              <div className="flex flex-col gap-4">
-                <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">Device Voice Control</h3>
-                
-                <div className="flex items-center justify-between p-4 bg-neutral-900/50 border border-neutral-800 rounded-xl">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-medium text-white">Use Laptop Audio</span>
-                    <span className="text-xs text-neutral-400">Mic and speakers for AI</span>
-                  </div>
-                  <button 
-                    onClick={() => handleUseLaptopAudioToggle(!useLaptopAudio)}
-                    className={`w-11 h-6 rounded-full transition-colors relative ${useLaptopAudio ? 'bg-cyan-500' : 'bg-neutral-700'}`}
-                  >
-                    <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${useLaptopAudio ? 'left-6' : 'left-1'}`} />
-                  </button>
-                </div>
-
-                {pairingStatus === 'connected' && (
-                  <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
-                    <label className="text-xs text-neutral-400 font-medium ml-1">Background Task Instruction</label>
-                    <textarea 
-                      value={taskPrompt}
-                      onChange={(e) => handleTaskPromptChange(e.target.value)}
-                      placeholder="e.g., Control music playback..."
-                      className="w-full bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-sm text-white focus:border-cyan-500 focus:outline-none resize-none h-28"
-                    />
-                    <button 
-                      onClick={() => {
-                        if (isConnected) {
-                          disconnect();
-                          setTimeout(() => connect(), 500);
-                        }
-                      }}
-                      className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-cyan-400 rounded-xl text-sm font-medium transition-colors mt-1"
-                    >
-                      Apply Task Prompt
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* Persona Section */}
               <div className="flex flex-col gap-4">
                 <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">AI Persona</h3>
@@ -570,6 +538,28 @@ export function MainAI() {
           {isConnected ? <MicOff size={24} /> : <Mic size={24} />}
         </button>
       </div>
+
+      {/* Companion Text Panel */}
+      {companionText && (
+        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-30">
+          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl p-4 shadow-2xl flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest flex items-center gap-2">
+                <Smartphone size={14} /> Companion Links
+              </h3>
+              <button 
+                onClick={() => setCompanionText('')}
+                className="text-neutral-500 hover:text-white transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="text-sm text-neutral-300 whitespace-pre-wrap font-mono bg-black/50 p-3 rounded-lg border border-neutral-800 max-h-48 overflow-y-auto">
+              {companionText}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
