@@ -15,8 +15,8 @@ async function startServer() {
   });
 
   // Device pairing state
-  // Map of pairing code to laptop WebSocket
-  const pendingPairings = new Map<string, { ws: WebSocket, expiresAt: number }>();
+  // Map of pairing code to device WebSocket
+  const pendingPairings = new Map<string, { ws: WebSocket, role: string, expiresAt: number }>();
   // Map of laptop WS to tablet WS
   const activeConnections = new Map<WebSocket, WebSocket>();
   const tabletToLaptop = new Map<WebSocket, WebSocket>();
@@ -27,7 +27,7 @@ async function startServer() {
     for (const [code, data] of pendingPairings.entries()) {
       if (now > data.expiresAt) {
         pendingPairings.delete(code);
-        // Notify laptop that code expired
+        // Notify device that code expired
         if (data.ws.readyState === WebSocket.OPEN) {
           data.ws.send(JSON.stringify({ type: 'pairing_expired', code }));
         }
@@ -40,24 +40,28 @@ async function startServer() {
       try {
         const data = JSON.parse(message.toString());
 
-        if (data.type === 'register_laptop') {
-          const { code } = data;
+        if (data.type === 'register_device') {
+          const { code, role } = data;
           // 2 minutes expiration
-          pendingPairings.set(code, { ws, expiresAt: Date.now() + 2 * 60 * 1000 });
+          pendingPairings.set(code, { ws, role, expiresAt: Date.now() + 2 * 60 * 1000 });
           ws.send(JSON.stringify({ type: 'registered', code }));
         } 
-        else if (data.type === 'connect_tablet') {
-          const { code } = data;
+        else if (data.type === 'connect_device') {
+          const { code, role } = data;
           const pairing = pendingPairings.get(code);
           
           if (pairing && pairing.expiresAt > Date.now()) {
             // Success
             pendingPairings.delete(code);
-            activeConnections.set(pairing.ws, ws);
-            tabletToLaptop.set(ws, pairing.ws);
             
-            ws.send(JSON.stringify({ type: 'connected', role: 'tablet' }));
-            pairing.ws.send(JSON.stringify({ type: 'connected', role: 'laptop' }));
+            const laptopWs = role === 'laptop' ? ws : pairing.ws;
+            const tabletWs = role === 'tablet' ? ws : pairing.ws;
+
+            activeConnections.set(laptopWs, tabletWs);
+            tabletToLaptop.set(tabletWs, laptopWs);
+            
+            ws.send(JSON.stringify({ type: 'connected', role: pairing.role }));
+            pairing.ws.send(JSON.stringify({ type: 'connected', role: role }));
           } else {
             // Failed
             ws.send(JSON.stringify({ type: 'error', message: 'Invalid or expired code' }));

@@ -23,11 +23,12 @@ export function MainAI() {
   const [useLaptopAudio, setUseLaptopAudio] = useState(true);
   const [taskPrompt, setTaskPrompt] = useState('');
   
-  const [pairingCode, setPairingCode] = useState('');
+  const [myDeviceCode, setMyDeviceCode] = useState('');
+  const [inputCode, setInputCode] = useState('');
   const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'connected' | 'expired'>('idle');
-  const [expiresIn, setExpiresIn] = useState(120);
   const wsRef = useRef<WebSocket | null>(null);
-  const timerRef = useRef<number | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'voice' | 'device' | 'general'>('voice');
 
   useEffect(() => {
     const saved = localStorage.getItem('selectedVoiceId');
@@ -35,25 +36,15 @@ export function MainAI() {
     
     setUseLaptopAudio(localStorage.getItem('useLaptopAudio') !== 'false');
     setTaskPrompt(localStorage.getItem('taskPrompt') || '');
+
+    // Auto-generate and start pairing
+    const initialCode = generatePairingCode();
+    setMyDeviceCode(initialCode);
+    startPairing(initialCode);
   }, []);
 
-  const startPairing = (codeToUse?: string) => {
-    const newCode = codeToUse || generatePairingCode();
-    setPairingCode(newCode);
+  const startPairing = (codeToUse: string) => {
     setPairingStatus('waiting');
-    setExpiresIn(120);
-
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = window.setInterval(() => {
-      setExpiresIn(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          setPairingStatus('expired');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
 
     const wsUrl = window.location.protocol === 'https:' 
       ? `wss://${window.location.host}/ws` 
@@ -64,7 +55,11 @@ export function MainAI() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'register_laptop', code: newCode }));
+      if (codeToUse === myDeviceCode) {
+        ws.send(JSON.stringify({ type: 'register_device', role: 'laptop', code: codeToUse }));
+      } else {
+        ws.send(JSON.stringify({ type: 'connect_device', role: 'laptop', code: codeToUse }));
+      }
     };
 
     ws.onmessage = (event) => {
@@ -73,15 +68,13 @@ export function MainAI() {
         if (data.type === 'connected') {
           setPairingStatus('connected');
           localStorage.setItem('isDeviceConnected', 'true');
-          if (timerRef.current) clearInterval(timerRef.current);
-        } else if (data.type === 'pairing_expired') {
-          setPairingStatus('expired');
-          localStorage.setItem('isDeviceConnected', 'false');
-          if (timerRef.current) clearInterval(timerRef.current);
         } else if (data.type === 'disconnected') {
           setPairingStatus('idle');
-          setPairingCode('');
           localStorage.setItem('isDeviceConnected', 'false');
+          // Auto-regenerate on disconnect
+          const newCode = generatePairingCode();
+          setMyDeviceCode(newCode);
+          startPairing(newCode);
         } else if (data.type === 'command') {
           handleRemoteCommand(data.payload);
         }
@@ -106,7 +99,6 @@ export function MainAI() {
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
       if (wsRef.current) wsRef.current.close();
     };
   }, []);
@@ -348,7 +340,7 @@ export function MainAI() {
         <div className="absolute inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm">
           <div className="w-96 bg-neutral-950 border-l border-neutral-800 h-full flex flex-col animate-in slide-in-from-right duration-300">
             <div className="flex items-center justify-between p-6 border-b border-neutral-800">
-              <h2 className="text-lg font-semibold text-white">AI Settings</h2>
+              <h2 className="text-lg font-semibold text-white">Settings</h2>
               <button 
                 onClick={() => setIsSettingsOpen(false)}
                 className="p-2 rounded-full hover:bg-neutral-800 text-neutral-400 transition-colors"
@@ -357,129 +349,186 @@ export function MainAI() {
               </button>
             </div>
             
+            <div className="flex border-b border-neutral-800">
+              <button 
+                onClick={() => setActiveTab('voice')}
+                className={`flex-1 py-3 text-xs font-semibold uppercase tracking-widest transition-colors ${activeTab === 'voice' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-950/20' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50'}`}
+              >
+                Voice
+              </button>
+              <button 
+                onClick={() => setActiveTab('device')}
+                className={`flex-1 py-3 text-xs font-semibold uppercase tracking-widest transition-colors ${activeTab === 'device' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-950/20' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50'}`}
+              >
+                Device
+              </button>
+              <button 
+                onClick={() => setActiveTab('general')}
+                className={`flex-1 py-3 text-xs font-semibold uppercase tracking-widest transition-colors ${activeTab === 'general' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-950/20' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50'}`}
+              >
+                General
+              </button>
+            </div>
+            
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8">
-              {/* Device Connection Section */}
-              <div className="flex flex-col gap-4">
-                <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">Device Connection</h3>
-                
-                <div className="flex flex-col gap-3 p-4 bg-neutral-900/50 border border-neutral-800 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm font-medium text-white">Pair Tablet Remote</span>
-                      <span className="text-xs text-neutral-400">Control AI from your tablet</span>
-                    </div>
-                    <Smartphone size={20} className="text-cyan-400" />
-                  </div>
+              {activeTab === 'device' && (
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">Device Connection</h3>
                   
-                  {pairingStatus === 'idle' || pairingStatus === 'expired' ? (
-                    <div className="flex flex-col gap-2 mt-2">
-                      <input 
-                        type="text"
-                        value={pairingCode}
-                        onChange={(e) => {
-                          let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                          if (val.length > 4) {
-                            val = val.slice(0, 4) + '-' + val.slice(4, 8);
-                          }
-                          setPairingCode(val);
-                        }}
-                        placeholder="Enter or generate code"
-                        maxLength={9}
-                        className="w-full bg-black/50 border border-neutral-800 rounded-lg p-2.5 text-center text-lg tracking-widest font-mono text-white focus:border-cyan-500 focus:outline-none"
-                      />
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => setPairingCode(generatePairingCode())}
-                          className="flex-1 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-medium transition-colors"
-                        >
-                          Generate
-                        </button>
-                        <button 
-                          onClick={() => startPairing(pairingCode)}
-                          disabled={pairingCode.length < 4}
-                          className="flex-1 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Start Listening
-                        </button>
+                  <div className="flex flex-col gap-3 p-4 bg-neutral-900/50 border border-neutral-800 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-medium text-white">Pair Tablet Remote</span>
+                        <span className="text-xs text-neutral-400">Control AI from your tablet</span>
                       </div>
+                      <Smartphone size={20} className="text-cyan-400" />
                     </div>
-                  ) : pairingStatus === 'waiting' ? (
-                    <div className="flex flex-col gap-3 mt-2">
-                      <div className="flex items-center justify-between bg-black/50 border border-neutral-800 rounded-lg p-3">
-                        <span className="text-xl font-mono tracking-widest font-bold text-white">{pairingCode}</span>
+                    
+                    {pairingStatus === 'connected' ? (
+                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 mt-2">
+                        <div className="flex items-center gap-2 text-emerald-400">
+                          <Check size={16} />
+                          <span className="text-sm font-medium">Tablet Connected</span>
+                        </div>
                         <button 
-                          onClick={() => startPairing()}
-                          className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-                          title="Refresh Code"
+                          onClick={() => {
+                            if (wsRef.current) wsRef.current.close();
+                            setPairingStatus('idle');
+                            localStorage.setItem('isDeviceConnected', 'false');
+                            const newCode = generatePairingCode();
+                            setMyDeviceCode(newCode);
+                            startPairing(newCode);
+                          }}
+                          className="text-xs text-neutral-400 hover:text-white transition-colors"
                         >
-                          <RefreshCw size={16} />
+                          Disconnect
                         </button>
                       </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-cyan-400 flex items-center gap-1.5">
-                          <Loader2 size={12} className="animate-spin" /> Waiting for tablet...
-                        </span>
-                        <span className="text-neutral-500 font-mono">
-                          {Math.floor(expiresIn / 60)}:{(expiresIn % 60).toString().padStart(2, '0')}
+                    ) : (
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="text-xs text-neutral-400 mb-1 uppercase tracking-widest font-semibold">Your Pair Code</div>
+                        <div className="flex items-center justify-between bg-black/50 border border-neutral-800 rounded-lg p-3 mb-2">
+                          <span className="text-xl font-mono tracking-widest font-bold text-white">{myDeviceCode || '------'}</span>
+                          <button 
+                            onClick={() => {
+                              const newCode = generatePairingCode();
+                              setMyDeviceCode(newCode);
+                              startPairing(newCode);
+                            }}
+                            className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+                            title="Generate New Code"
+                          >
+                            <RefreshCw size={16} />
+                          </button>
+                        </div>
+                        
+                        <div className="flex items-center justify-between text-xs mb-2">
+                          <span className="text-cyan-400 flex items-center gap-1.5">
+                            <Loader2 size={12} className="animate-spin" /> Waiting for tablet...
+                          </span>
+                        </div>
+
+                        <div className="relative flex items-center py-2">
+                          <div className="flex-grow border-t border-neutral-800"></div>
+                          <span className="flex-shrink-0 mx-4 text-neutral-500 text-xs font-semibold uppercase tracking-widest">OR</span>
+                          <div className="flex-grow border-t border-neutral-800"></div>
+                        </div>
+
+                        <div className="text-xs text-neutral-400 mb-1 uppercase tracking-widest font-semibold">Enter Tablet Code</div>
+                        <input 
+                          type="text"
+                          value={inputCode}
+                          onChange={(e) => {
+                            let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                            if (val.length > 4) {
+                              val = val.slice(0, 4) + '-' + val.slice(4, 8);
+                            }
+                            setInputCode(val);
+                          }}
+                          placeholder="Enter code from tablet"
+                          maxLength={9}
+                          className="w-full bg-black/50 border border-neutral-800 rounded-lg p-2.5 text-center text-lg tracking-widest font-mono text-white focus:border-cyan-500 focus:outline-none"
+                        />
+                        <div className="flex gap-2 mt-2">
+                          <button 
+                            onClick={() => startPairing(inputCode)}
+                            disabled={inputCode.length < 9}
+                            className="flex-1 py-3 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            CONNECT
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'voice' && (
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">AI Persona</h3>
+                  <p className="text-xs text-neutral-400 mb-1">
+                    Select an anime persona for the AI. Changing this while connected will briefly disconnect and reconnect the AI.
+                  </p>
+                  
+                  {ANIME_VOICES.map((voice) => (
+                  <button
+                    key={voice.id}
+                    onClick={() => handleVoiceSelect(voice.id)}
+                    className={`flex flex-col gap-2 p-4 rounded-xl border text-left transition-all duration-300 ${
+                      selectedVoiceId === voice.id 
+                        ? 'border-cyan-500 bg-cyan-950/30' 
+                        : 'border-neutral-800 bg-neutral-900/50 hover:border-neutral-700 hover:bg-neutral-900'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${voice.color}`} />
+                        <span className={`font-semibold ${selectedVoiceId === voice.id ? 'text-cyan-300' : 'text-white'}`}>
+                          {voice.name}
                         </span>
                       </div>
-                      <div className="text-[10px] text-neutral-500 text-center mt-1">
-                        Go to <span className="text-neutral-300 font-mono">{window.location.origin}/#/tablet</span> on your tablet
-                      </div>
+                      {selectedVoiceId === voice.id && <Check size={16} className="text-cyan-400" />}
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 mt-2">
-                      <div className="flex items-center gap-2 text-emerald-400">
-                        <Check size={16} />
-                        <span className="text-sm font-medium">Tablet Connected</span>
+                    <span className="text-xs text-neutral-400 leading-relaxed">
+                      {voice.description}
+                    </span>
+                  </button>
+                ))}
+                </div>
+              )}
+
+              {activeTab === 'general' && (
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">General Settings</h3>
+                  
+                  <div className="flex flex-col gap-4 p-4 bg-neutral-900/50 border border-neutral-800 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-medium text-white">Use Laptop Audio</span>
+                        <span className="text-xs text-neutral-400">Capture audio from this device</span>
                       </div>
-                      <button 
-                        onClick={() => {
-                          if (wsRef.current) wsRef.current.close();
-                          setPairingStatus('idle');
-                          localStorage.setItem('isDeviceConnected', 'false');
-                        }}
-                        className="text-xs text-neutral-400 hover:text-white transition-colors"
+                      <button
+                        onClick={() => handleUseLaptopAudioToggle(!useLaptopAudio)}
+                        className={`w-10 h-5 rounded-full transition-colors relative ${useLaptopAudio ? 'bg-cyan-500' : 'bg-neutral-700'}`}
                       >
-                        Disconnect
+                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${useLaptopAudio ? 'translate-x-5' : 'translate-x-0'}`} />
                       </button>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Persona Section */}
-              <div className="flex flex-col gap-4">
-                <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">AI Persona</h3>
-                <p className="text-xs text-neutral-400 mb-1">
-                  Select an anime persona for the AI. Changing this while connected will briefly disconnect and reconnect the AI.
-                </p>
-                
-                {ANIME_VOICES.map((voice) => (
-                <button
-                  key={voice.id}
-                  onClick={() => handleVoiceSelect(voice.id)}
-                  className={`flex flex-col gap-2 p-4 rounded-xl border text-left transition-all duration-300 ${
-                    selectedVoiceId === voice.id 
-                      ? 'border-cyan-500 bg-cyan-950/30' 
-                      : 'border-neutral-800 bg-neutral-900/50 hover:border-neutral-700 hover:bg-neutral-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${voice.color}`} />
-                      <span className={`font-semibold ${selectedVoiceId === voice.id ? 'text-cyan-300' : 'text-white'}`}>
-                        {voice.name}
-                      </span>
-                    </div>
-                    {selectedVoiceId === voice.id && <Check size={16} className="text-cyan-400" />}
                   </div>
-                  <span className="text-xs text-neutral-400 leading-relaxed">
-                    {voice.description}
-                  </span>
-                </button>
-              ))}
-              </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">Background Task Prompt</label>
+                    <textarea 
+                      value={taskPrompt}
+                      onChange={(e) => handleTaskPromptChange(e.target.value)}
+                      placeholder="e.g. 'You are helping me debug a React application. Keep answers concise.'"
+                      className="w-full h-24 bg-neutral-900/50 border border-neutral-800 rounded-xl p-3 text-sm text-white placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none resize-none"
+                    />
+                    <span className="text-[10px] text-neutral-500">This prompt will be added to the AI's system instructions.</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
