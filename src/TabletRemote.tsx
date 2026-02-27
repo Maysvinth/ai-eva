@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink } from 'lucide-react';
+import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check } from 'lucide-react';
 
 export function TabletRemote() {
   const [code, setCode] = useState('');
-  const [status, setStatus] = useState<'waiting' | 'connected' | 'error'>('waiting');
+  const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -13,7 +13,7 @@ export function TabletRemote() {
       return;
     }
 
-    setStatus('waiting');
+    setStatus('connecting');
     setErrorMsg('');
 
     const wsUrl = window.location.protocol === 'https:' 
@@ -37,7 +37,7 @@ export function TabletRemote() {
           setErrorMsg(data.message);
           ws.close();
         } else if (data.type === 'disconnected') {
-          setStatus('waiting');
+          setStatus('idle');
           setErrorMsg('Laptop disconnected');
         }
       } catch (e) {
@@ -71,7 +71,7 @@ export function TabletRemote() {
           <button 
             onClick={() => {
               wsRef.current?.close();
-              setStatus('waiting');
+              setStatus('idle');
             }}
             className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
           >
@@ -149,11 +149,23 @@ export function TabletRemote() {
 
           <button 
             onClick={connect}
-            disabled={code.length !== 9 || status === 'waiting' && code.length === 9 && !errorMsg}
-            className="w-full py-4 bg-cyan-500 hover:bg-cyan-400 disabled:bg-neutral-800 disabled:text-neutral-500 text-black rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2"
+            disabled={code.length !== 9 || status === 'connecting'}
+            className={`w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 ${
+              status === 'connecting' 
+                ? 'bg-yellow-500 text-black' 
+                : status === 'connected'
+                ? 'bg-emerald-500 text-black'
+                : status === 'error'
+                ? 'bg-red-500 text-white hover:bg-red-400'
+                : 'bg-cyan-500 hover:bg-cyan-400 disabled:bg-neutral-800 disabled:text-neutral-500 text-black'
+            }`}
           >
-            {status === 'waiting' && code.length === 9 && !errorMsg ? (
+            {status === 'connecting' ? (
               <><Loader2 size={20} className="animate-spin" /> Connecting...</>
+            ) : status === 'connected' ? (
+              <><Check size={20} /> Connected</>
+            ) : status === 'error' ? (
+              'Retry Connection'
             ) : (
               'Connect'
             )}

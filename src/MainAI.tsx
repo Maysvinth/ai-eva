@@ -280,15 +280,22 @@ export function MainAI() {
             onClick={(e) => { e.stopPropagation(); isConnected ? disconnect() : connect(); }}
             disabled={isConnecting}
             className={`relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-mono tracking-widest uppercase transition-all duration-300 overflow-hidden ${
-              isConnected 
-                ? 'border-red-500/30 text-red-400 bg-red-950/30 hover:bg-red-900/40' 
+              isConnecting
+                ? 'border-yellow-500/50 text-yellow-400 bg-yellow-950/30'
+                : isConnected 
+                ? 'border-emerald-500/50 text-emerald-400 bg-emerald-950/30 hover:bg-red-900/40 hover:border-red-500/50 hover:text-red-400 group shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
                 : 'border-cyan-500/30 text-cyan-400 bg-cyan-950/30 hover:bg-cyan-900/40'
             }`}
           >
             {isConnecting ? (
               <><Loader2 size={14} className="animate-spin" /> CONNECTING...</>
             ) : isConnected ? (
-              <><MicOff size={14} /> DISCONNECT</>
+              <>
+                <Check size={14} className="group-hover:hidden" />
+                <MicOff size={14} className="hidden group-hover:block" />
+                <span className="group-hover:hidden">CONNECTED</span>
+                <span className="hidden group-hover:block">DISCONNECT</span>
+              </>
             ) : (
               <><Mic size={14} /> CONNECT AI</>
             )}
