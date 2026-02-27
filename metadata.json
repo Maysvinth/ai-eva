@@ -1,5 +1,5 @@
 {
-  "name": "Gemini Assistant",
-  "description": "A clean, modern chat interface for interacting with the Gemini AI model.",
-  "requestFramePermissions": []
+  "name": "Neon Voice AI",
+  "description": "A voice-only AI interface with a pulsing neon circle.",
+  "requestFramePermissions": ["microphone"]
 }
