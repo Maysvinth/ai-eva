@@ -1,124 +1,143 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import { WebSocketServer, WebSocket } from "ws";
 import http from "http";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: '/ws' });
+
+  app.use(express.json());
 
   // API routes FIRST
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
 
-  // Device pairing state
-  // Map of pairing code to device WebSocket
-  const pendingPairings = new Map<string, { ws: WebSocket, role: string, expiresAt: number }>();
-  // Map of laptop WS to tablet WS
-  const activeConnections = new Map<WebSocket, WebSocket>();
-  const tabletToLaptop = new Map<WebSocket, WebSocket>();
+  // --- HTTP Polling Device Connection Method ---
+  
+  interface DeviceSession {
+    laptopLastSeen: number;
+    tabletLastSeen: number;
+    laptopCommands: any[];
+    tabletCommands: any[];
+    aiState: {
+      isConnected: boolean;
+      isUserSpeaking: boolean;
+      isAiSpeaking: boolean;
+      voiceName: string;
+      voiceColor: string;
+    };
+    status: 'waiting' | 'connected';
+  }
+  
+  const sessions = new Map<string, DeviceSession>();
 
-  // Cleanup expired pairings every 10 seconds
+  // Cleanup stale sessions every 10 seconds
   setInterval(() => {
     const now = Date.now();
-    for (const [code, data] of pendingPairings.entries()) {
-      if (now > data.expiresAt) {
-        pendingPairings.delete(code);
-        // Notify device that code expired
-        if (data.ws.readyState === WebSocket.OPEN) {
-          data.ws.send(JSON.stringify({ type: 'pairing_expired', code }));
-        }
+    for (const [code, session] of sessions.entries()) {
+      // If laptop hasn't polled in 30 seconds, delete session
+      if (now - session.laptopLastSeen > 30000) {
+        sessions.delete(code);
       }
     }
   }, 10000);
 
-  wss.on("connection", (ws) => {
-    ws.on("message", (message) => {
-      try {
-        const data = JSON.parse(message.toString());
-
-        if (data.type === 'register_device') {
-          const { code, role } = data;
-          // 2 minutes expiration
-          pendingPairings.set(code, { ws, role, expiresAt: Date.now() + 2 * 60 * 1000 });
-          ws.send(JSON.stringify({ type: 'registered', code }));
-        } 
-        else if (data.type === 'connect_device') {
-          const { code, role } = data;
-          const pairing = pendingPairings.get(code);
-          
-          if (pairing && pairing.expiresAt > Date.now()) {
-            // Success
-            pendingPairings.delete(code);
-            
-            const laptopWs = role === 'laptop' ? ws : pairing.ws;
-            const tabletWs = role === 'tablet' ? ws : pairing.ws;
-
-            activeConnections.set(laptopWs, tabletWs);
-            tabletToLaptop.set(tabletWs, laptopWs);
-            
-            ws.send(JSON.stringify({ type: 'connected', role: pairing.role }));
-            pairing.ws.send(JSON.stringify({ type: 'connected', role: role }));
-          } else {
-            // Failed
-            ws.send(JSON.stringify({ type: 'error', message: 'Invalid or expired code' }));
-          }
-        }
-        else if (data.type === 'command') {
-          // Tablet sending command to laptop
-          const laptopWs = tabletToLaptop.get(ws);
-          if (laptopWs && laptopWs.readyState === WebSocket.OPEN) {
-            laptopWs.send(JSON.stringify({ type: 'command', payload: data.payload }));
-          }
-        }
-        else if (data.type === 'tablet_command') {
-          // Laptop sending command to tablet
-          const tabletWs = activeConnections.get(ws);
-          if (tabletWs && tabletWs.readyState === WebSocket.OPEN) {
-            tabletWs.send(JSON.stringify({ type: 'tablet_command', payload: data.payload }));
-          }
-        }
-        else if (data.type === 'status') {
-          // Laptop sending status to tablet
-          const tabletWs = activeConnections.get(ws);
-          if (tabletWs && tabletWs.readyState === WebSocket.OPEN) {
-            tabletWs.send(JSON.stringify({ type: 'status', payload: data.payload }));
-          }
-        }
-      } catch (e) {
-        console.error("WebSocket message error:", e);
-      }
+  app.post("/api/device/register", (req, res) => {
+    // Generate a 6-digit numeric code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    sessions.set(code, {
+      laptopLastSeen: Date.now(),
+      tabletLastSeen: 0,
+      laptopCommands: [],
+      tabletCommands: [],
+      aiState: { isConnected: false, isUserSpeaking: false, isAiSpeaking: false, voiceName: 'AI', voiceColor: 'bg-cyan-400' },
+      status: 'waiting'
     });
+    res.json({ code });
+  });
 
-    ws.on("close", () => {
-      // Cleanup
-      for (const [code, data] of pendingPairings.entries()) {
-        if (data.ws === ws) {
-          pendingPairings.delete(code);
-        }
+  app.post("/api/device/connect", (req, res) => {
+    const { code } = req.body;
+    const session = sessions.get(code);
+    if (session) {
+      session.status = 'connected';
+      session.tabletLastSeen = Date.now();
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, error: 'Invalid or expired code' });
+    }
+  });
+
+  app.post("/api/device/state", (req, res) => {
+    const { code, aiState } = req.body;
+    const session = sessions.get(code);
+    if (session) {
+      session.aiState = { ...session.aiState, ...aiState };
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false });
+    }
+  });
+
+  app.get("/api/device/poll-laptop", (req, res) => {
+    const code = req.query.code as string;
+    const session = sessions.get(code);
+    if (session) {
+      session.laptopLastSeen = Date.now();
+      const commands = [...session.laptopCommands];
+      session.laptopCommands = []; // Clear after reading
+      
+      // If tablet hasn't polled in 15 seconds, consider it disconnected
+      if (session.status === 'connected' && Date.now() - session.tabletLastSeen > 15000) {
+        session.status = 'waiting';
       }
       
-      const tabletWs = activeConnections.get(ws);
-      if (tabletWs) {
-        if (tabletWs.readyState === WebSocket.OPEN) {
-          tabletWs.send(JSON.stringify({ type: 'disconnected' }));
-        }
-        activeConnections.delete(ws);
-        tabletToLaptop.delete(tabletWs);
-      }
+      res.json({ status: session.status, commands });
+    } else {
+      res.json({ status: 'expired', commands: [] });
+    }
+  });
+
+  app.get("/api/device/poll-tablet", (req, res) => {
+    const code = req.query.code as string;
+    const session = sessions.get(code);
+    if (session) {
+      session.tabletLastSeen = Date.now();
+      const commands = [...session.tabletCommands];
+      session.tabletCommands = []; // Clear after reading
       
-      const laptopWs = tabletToLaptop.get(ws);
-      if (laptopWs) {
-        if (laptopWs.readyState === WebSocket.OPEN) {
-          laptopWs.send(JSON.stringify({ type: 'disconnected' }));
-        }
-        tabletToLaptop.delete(ws);
-        activeConnections.delete(laptopWs);
+      // If laptop hasn't polled in 15 seconds, consider it disconnected
+      if (Date.now() - session.laptopLastSeen > 15000) {
+        res.json({ status: 'disconnected', aiState: session.aiState, commands });
+      } else {
+        res.json({ status: session.status, aiState: session.aiState, commands });
       }
-    });
+    } else {
+      res.json({ status: 'disconnected', commands: [] });
+    }
+  });
+
+  app.post("/api/device/command", (req, res) => {
+    const { code, command, target } = req.body;
+    const session = sessions.get(code);
+    if (session && session.status === 'connected') {
+      if (target === 'tablet') {
+        session.tabletCommands.push(command);
+      } else {
+        session.laptopCommands.push(command);
+      }
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, error: 'Session not found or not connected' });
+    }
+  });
+
+  app.post("/api/device/disconnect", (req, res) => {
+    const { code } = req.body;
+    sessions.delete(code);
+    res.json({ success: true });
   });
 
   // Vite middleware for development

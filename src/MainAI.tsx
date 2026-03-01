@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Loader2, ExternalLink, Activity, Moon, GripHorizontal, Settings, X, Check, ChevronLeft, ChevronRight, RefreshCw, Smartphone } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useGeminiLive } from './useGeminiLive';
 import { ANIME_VOICES } from './voices';
+import { FloatingWidget } from './components/FloatingWidget';
 
 const generatePairingCode = () => {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -24,11 +26,12 @@ export function MainAI() {
   const [taskPrompt, setTaskPrompt] = useState('');
   
   const [myDeviceCode, setMyDeviceCode] = useState('');
-  const [inputCode, setInputCode] = useState('');
   const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'connected' | 'expired'>('idle');
-  const wsRef = useRef<WebSocket | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
 
   const [activeTab, setActiveTab] = useState<'voice' | 'device' | 'general'>('voice');
+
+  const currentVoice = ANIME_VOICES.find(v => v.id === selectedVoiceId) || ANIME_VOICES[0];
 
   useEffect(() => {
     const saved = localStorage.getItem('selectedVoiceId');
@@ -38,50 +41,53 @@ export function MainAI() {
     setTaskPrompt(localStorage.getItem('taskPrompt') || '');
 
     // Auto-generate and start pairing
-    const initialCode = generatePairingCode();
-    setMyDeviceCode(initialCode);
-    startPairing(initialCode);
+    startPairing();
+    
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
   }, []);
 
-  const startPairing = (codeToUse: string) => {
-    setPairingStatus('waiting');
-
-    const wsUrl = window.location.protocol === 'https:' 
-      ? `wss://${window.location.host}/ws` 
-      : `ws://${window.location.host}/ws`;
+  const startPairing = async () => {
+    try {
+      setPairingStatus('waiting');
+      const res = await fetch('/api/device/register', { method: 'POST' });
+      const data = await res.json();
+      const code = data.code;
+      setMyDeviceCode(code);
       
-    if (wsRef.current) wsRef.current.close();
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      if (codeToUse === myDeviceCode) {
-        ws.send(JSON.stringify({ type: 'register_device', role: 'laptop', code: codeToUse }));
-      } else {
-        ws.send(JSON.stringify({ type: 'connect_device', role: 'laptop', code: codeToUse }));
-      }
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'connected') {
-          setPairingStatus('connected');
-          localStorage.setItem('isDeviceConnected', 'true');
-        } else if (data.type === 'disconnected') {
-          setPairingStatus('idle');
-          localStorage.setItem('isDeviceConnected', 'false');
-          // Auto-regenerate on disconnect
-          const newCode = generatePairingCode();
-          setMyDeviceCode(newCode);
-          startPairing(newCode);
-        } else if (data.type === 'command') {
-          handleRemoteCommand(data.payload);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      
+      pollIntervalRef.current = window.setInterval(async () => {
+        try {
+          const pollRes = await fetch(`/api/device/poll-laptop?code=${code}`);
+          const pollData = await pollRes.json();
+          
+          if (pollData.status === 'connected') {
+            setPairingStatus('connected');
+            localStorage.setItem('isDeviceConnected', 'true');
+          } else if (pollData.status === 'waiting') {
+            setPairingStatus('waiting');
+            localStorage.setItem('isDeviceConnected', 'false');
+          } else if (pollData.status === 'expired') {
+            setPairingStatus('idle');
+            localStorage.setItem('isDeviceConnected', 'false');
+            clearInterval(pollIntervalRef.current!);
+            // Auto-regenerate
+            startPairing();
+          }
+          
+          if (pollData.commands && pollData.commands.length > 0) {
+            pollData.commands.forEach((cmd: any) => handleRemoteCommand(cmd));
+          }
+        } catch (e) {
+          console.error("Polling error", e);
         }
-      } catch (e) {
-        console.error(e);
-      }
-    };
+      }, 2000);
+      
+    } catch (e) {
+      console.error("Failed to register device", e);
+    }
   };
 
   const handleRemoteCommand = (payload: any) => {
@@ -98,19 +104,37 @@ export function MainAI() {
   };
 
   useEffect(() => {
-    return () => {
-      if (wsRef.current) wsRef.current.close();
-    };
-  }, []);
+    if (pairingStatus === 'connected' && myDeviceCode) {
+      fetch('/api/device/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: myDeviceCode,
+          aiState: {
+            isConnected,
+            isUserSpeaking,
+            isAiSpeaking,
+            voiceName: currentVoice.name,
+            voiceColor: currentVoice.color
+          }
+        })
+      }).catch(console.error);
+    }
+  }, [isConnected, isUserSpeaking, isAiSpeaking, currentVoice, pairingStatus, myDeviceCode]);
 
   useEffect(() => {
-    if (sendTabletCommand && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: 'tablet_command',
-        payload: sendTabletCommand
-      }));
+    if (sendTabletCommand && pairingStatus === 'connected') {
+      fetch('/api/device/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: myDeviceCode,
+          command: sendTabletCommand,
+          target: 'tablet'
+        })
+      }).catch(console.error);
     }
-  }, [sendTabletCommand]);
+  }, [sendTabletCommand, pairingStatus, myDeviceCode]);
 
   const handleVoiceSelect = (id: string) => {
     setSelectedVoiceId(id);
@@ -177,8 +201,6 @@ export function MainAI() {
     window.open(window.location.pathname + '#/widget', 'AIWidget', 'width=280,height=160,resizable=yes');
   };
 
-  const currentVoice = ANIME_VOICES.find(v => v.id === selectedVoiceId) || ANIME_VOICES[0];
-
   const circleSize = isAiSpeaking ? "w-64 h-64" : "w-48 h-48";
   
   const neonGlowStyle = {
@@ -233,99 +255,16 @@ export function MainAI() {
       </div>
 
       {/* Floating Adjustable Widget */}
-      <div 
-        className="absolute z-40 flex flex-col bg-black/80 backdrop-blur-md border border-neutral-800 rounded-xl shadow-2xl overflow-hidden resize"
-        style={{ left: pos.x, top: pos.y, minWidth: '240px', minHeight: '120px' }}
-      >
-        {/* Drag Handle / Header */}
-        <div 
-          className="flex flex-col p-3 border-b border-neutral-800 bg-neutral-900/50 cursor-move gap-1.5"
-          onMouseDown={handleMouseDown}
-        >
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-3 pointer-events-none">
-              <div className="relative flex items-center justify-center">
-                <div className={`w-2.5 h-2.5 rounded-full z-10 transition-colors duration-300 ${isConnected ? 'bg-cyan-400' : 'bg-neutral-600'}`} />
-                {isConnected && (
-                  <div className="absolute w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping opacity-75" />
-                )}
-              </div>
-              <span className={`text-xs font-semibold tracking-wider uppercase transition-colors duration-300 ${
-                isConnected ? 'text-cyan-100' : 'text-neutral-500'
-              }`}>
-                {isConnected ? 'Connected' : 'Offline'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button 
-                onClick={(e) => { e.stopPropagation(); openWidget(); }}
-                onMouseDown={(e) => e.stopPropagation()}
-                className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-cyan-300 transition-colors cursor-pointer"
-                title="Popout Widget"
-              >
-                <ExternalLink size={14} />
-              </button>
-              <GripHorizontal size={14} className="text-neutral-500 pointer-events-none" />
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 text-[10px] text-cyan-500/70 font-mono uppercase tracking-wider pointer-events-none">
-            <div className={`w-1.5 h-1.5 rounded-full ${currentVoice.color}`} />
-            Voice: {currentVoice.name}
-          </div>
-        </div>
-
-        {/* Widget Body */}
-        <div className="p-4 flex flex-col gap-3 flex-1 justify-center">
-          {/* Connect/Disconnect Box */}
-          <button
-            onClick={(e) => { e.stopPropagation(); isConnected ? disconnect() : connect(); }}
-            disabled={isConnecting}
-            className={`relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-mono tracking-widest uppercase transition-all duration-300 overflow-hidden ${
-              isConnecting
-                ? 'border-yellow-500/50 text-yellow-400 bg-yellow-950/30'
-                : isConnected 
-                ? 'border-emerald-500/50 text-emerald-400 bg-emerald-950/30 hover:bg-red-900/40 hover:border-red-500/50 hover:text-red-400 group shadow-[0_0_15px_rgba(16,185,129,0.2)]' 
-                : 'border-cyan-500/30 text-cyan-400 bg-cyan-950/30 hover:bg-cyan-900/40'
-            }`}
-          >
-            {isConnecting ? (
-              <><Loader2 size={14} className="animate-spin" /> CONNECTING...</>
-            ) : isConnected ? (
-              <>
-                <Check size={14} className="group-hover:hidden" />
-                <MicOff size={14} className="hidden group-hover:block" />
-                <span className="group-hover:hidden">CONNECTED</span>
-                <span className="hidden group-hover:block">DISCONNECT</span>
-              </>
-            ) : (
-              <><Mic size={14} /> CONNECT AI</>
-            )}
-          </button>
-
-          {/* Voice Status Box */}
-          <div className={`relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-mono tracking-widest uppercase transition-all duration-300 overflow-hidden ${
-            !isConnected ? 'border-neutral-800 text-neutral-600 bg-neutral-900/50' :
-            isUserSpeaking ? 'border-cyan-400/60 text-cyan-100 bg-gradient-to-r from-cyan-900/40 to-cyan-800/40 shadow-[0_0_15px_rgba(0,255,255,0.3)]' : 'border-cyan-900/50 text-cyan-600 bg-cyan-950/30'
-          }`}>
-            <div className="relative flex items-center gap-2 z-10">
-              {!isConnected ? (
-                <>OFFLINE</>
-              ) : isUserSpeaking ? (
-                <><Activity size={14} className="text-cyan-300 animate-pulse" /> LISTENING</>
-              ) : (
-                <><Moon size={14} className="opacity-50" /> IDLE</>
-              )}
-            </div>
-          </div>
-        </div>
-        
-        {/* Resize Handle Hint */}
-        <div className="absolute bottom-1 right-1 w-3 h-3 cursor-se-resize opacity-50 pointer-events-none text-neutral-500">
-          <svg viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 10V8H10V10H8ZM5 10V8H7V10H5ZM8 7V5H10V7H8ZM2 10V8H4V10H2ZM5 7V5H7V7H5ZM8 4V2H10V4H8Z" fill="currentColor"/>
-          </svg>
-        </div>
-      </div>
+      <FloatingWidget 
+        isConnected={isConnected}
+        isConnecting={isConnecting}
+        isUserSpeaking={isUserSpeaking}
+        isAiSpeaking={isAiSpeaking}
+        onConnect={connect}
+        onDisconnect={disconnect}
+        voiceName={currentVoice.name}
+        voiceColor={currentVoice.color}
+      />
 
       <button 
         onClick={() => setIsSettingsOpen(true)}
@@ -392,12 +331,14 @@ export function MainAI() {
                         </div>
                         <button 
                           onClick={() => {
-                            if (wsRef.current) wsRef.current.close();
+                            fetch('/api/device/disconnect', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ code: myDeviceCode })
+                            }).catch(console.error);
                             setPairingStatus('idle');
                             localStorage.setItem('isDeviceConnected', 'false');
-                            const newCode = generatePairingCode();
-                            setMyDeviceCode(newCode);
-                            startPairing(newCode);
+                            startPairing();
                           }}
                           className="text-xs text-neutral-400 hover:text-white transition-colors"
                         >
@@ -406,14 +347,33 @@ export function MainAI() {
                       </div>
                     ) : (
                       <div className="flex flex-col gap-2 mt-2">
-                        <div className="text-xs text-neutral-400 mb-1 uppercase tracking-widest font-semibold">Your Pair Code</div>
+                        <div className="text-xs text-neutral-400 mb-1 uppercase tracking-widest font-semibold">Scan to Connect</div>
+                        <div className="flex flex-col items-center justify-center bg-white p-4 rounded-xl mb-2">
+                          {myDeviceCode ? (
+                            <QRCodeSVG value={`${window.location.origin}/#/tablet?code=${myDeviceCode}`} size={160} />
+                          ) : (
+                            <div className="w-[160px] h-[160px] bg-neutral-200 animate-pulse rounded-lg flex items-center justify-center">
+                              <Loader2 size={24} className="text-neutral-400 animate-spin" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="relative flex items-center py-2">
+                          <div className="flex-grow border-t border-neutral-800"></div>
+                          <span className="flex-shrink-0 mx-4 text-neutral-500 text-xs font-semibold uppercase tracking-widest">OR USE CODE</span>
+                          <div className="flex-grow border-t border-neutral-800"></div>
+                        </div>
+
                         <div className="flex items-center justify-between bg-black/50 border border-neutral-800 rounded-lg p-3 mb-2">
                           <span className="text-xl font-mono tracking-widest font-bold text-white">{myDeviceCode || '------'}</span>
                           <button 
                             onClick={() => {
-                              const newCode = generatePairingCode();
-                              setMyDeviceCode(newCode);
-                              startPairing(newCode);
+                              fetch('/api/device/disconnect', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ code: myDeviceCode })
+                              }).catch(console.error);
+                              startPairing();
                             }}
                             className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
                             title="Generate New Code"

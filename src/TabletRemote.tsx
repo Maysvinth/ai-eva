@@ -1,11 +1,35 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check } from 'lucide-react';
+import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check, QrCode, X } from 'lucide-react';
+import { Scanner } from '@yudiel/react-qr-scanner';
+import { FloatingWidget } from './components/FloatingWidget';
 
 export function TabletRemote() {
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const wsRef = useRef<WebSocket | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const pollIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Check if code is in URL
+    try {
+      const hashParts = window.location.hash.split('?');
+      if (hashParts.length > 1) {
+        const urlParams = new URLSearchParams(hashParts[1]);
+        const codeFromUrl = urlParams.get('code');
+        if (codeFromUrl && codeFromUrl.length === 6) {
+          setCode(codeFromUrl);
+          connect(codeFromUrl);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
 
   const handleTabletCommand = (payload: any) => {
     const { action, target, details } = payload;
@@ -28,66 +52,88 @@ export function TabletRemote() {
     }
   };
 
-  const connect = (codeToUse?: string) => {
+  const [aiState, setAiState] = useState({
+    isConnected: false,
+    isUserSpeaking: false,
+    isAiSpeaking: false,
+    voiceName: 'AI',
+    voiceColor: 'bg-cyan-400'
+  });
+
+  const connect = async (codeToUse?: string) => {
     const finalCode = codeToUse || code;
-    if (!finalCode || finalCode.length !== 9) {
-      setErrorMsg('Please enter a valid code (e.g. ABXZ-4821)');
+    if (!finalCode || finalCode.length !== 6) {
+      setErrorMsg('Please enter a valid 6-digit code');
       return;
     }
 
     setStatus('connecting');
     setErrorMsg('');
 
-    const wsUrl = window.location.protocol === 'https:' 
-      ? `wss://${window.location.host}/ws` 
-      : `ws://${window.location.host}/ws`;
+    try {
+      const res = await fetch('/api/device/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: finalCode })
+      });
+      const data = await res.json();
       
-    if (wsRef.current) wsRef.current.close();
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'connect_device', role: 'tablet', code: finalCode.toUpperCase() }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'connected') {
-          setStatus('connected');
-        } else if (data.type === 'error') {
-          setStatus('error');
-          setErrorMsg(data.message);
-          ws.close();
-        } else if (data.type === 'disconnected') {
-          setStatus('idle');
-          setErrorMsg('Laptop disconnected');
-        } else if (data.type === 'tablet_command') {
-          handleTabletCommand(data.payload);
-        }
-      } catch (e) {
-        console.error(e);
+      if (data.success) {
+        setStatus('connected');
+        
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        
+        pollIntervalRef.current = window.setInterval(async () => {
+          try {
+            const pollRes = await fetch(`/api/device/poll-tablet?code=${finalCode}`);
+            const pollData = await pollRes.json();
+            
+            if (pollData.status === 'disconnected') {
+              setStatus('idle');
+              setErrorMsg('Laptop disconnected');
+              clearInterval(pollIntervalRef.current!);
+            } else if (pollData.aiState) {
+              setAiState(pollData.aiState);
+            }
+          } catch (e) {
+            console.error("Polling error", e);
+          }
+        }, 2000);
+      } else {
+        setStatus('error');
+        setErrorMsg(data.error || 'Connection failed');
       }
-    };
-
-    ws.onerror = () => {
+    } catch (e) {
       setStatus('error');
       setErrorMsg('Connection error');
-    };
+    }
   };
 
   const sendCommand = (cmd: string, args?: any) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: 'command',
-        payload: { command: cmd, ...args }
-      }));
+    if (status === 'connected') {
+      fetch('/api/device/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          command: { command: cmd, ...args },
+          target: 'laptop'
+        })
+      }).catch(console.error);
     }
   };
 
   if (status === 'connected') {
     return (
-      <div className="flex flex-col h-screen bg-neutral-950 text-white font-sans p-6">
+      <div className="flex flex-col h-screen bg-neutral-950 text-white font-sans p-6 overflow-hidden relative">
+        <FloatingWidget 
+          isConnected={aiState.isConnected}
+          isUserSpeaking={aiState.isUserSpeaking}
+          isAiSpeaking={aiState.isAiSpeaking}
+          voiceName={aiState.voiceName}
+          voiceColor={aiState.voiceColor}
+        />
+
         <div className="flex items-center justify-between mb-8 pb-4 border-b border-neutral-800">
           <div className="flex items-center gap-3">
             <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
@@ -95,7 +141,11 @@ export function TabletRemote() {
           </div>
           <button 
             onClick={() => {
-              wsRef.current?.close();
+              fetch('/api/device/disconnect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+              }).catch(console.error);
               setStatus('idle');
             }}
             className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
@@ -153,22 +203,63 @@ export function TabletRemote() {
         </div>
 
         <div className="w-full flex flex-col gap-4">
-          <div className="text-xs text-neutral-400 uppercase tracking-widest font-semibold text-center">Enter Laptop Code</div>
+          {isScanning ? (
+            <div className="w-full rounded-xl overflow-hidden border border-neutral-800 relative bg-black aspect-square">
+              <Scanner
+                onScan={(result) => {
+                  if (result && result.length > 0) {
+                    const text = result[0].rawValue;
+                    if (text.includes('code=')) {
+                      const urlParams = new URLSearchParams(text.split('?')[1]);
+                      const codeFromUrl = urlParams.get('code');
+                      if (codeFromUrl && codeFromUrl.length === 6) {
+                        setIsScanning(false);
+                        setCode(codeFromUrl);
+                        connect(codeFromUrl);
+                      }
+                    } else if (text.length === 6 && /^\d+$/.test(text)) {
+                      setIsScanning(false);
+                      setCode(text);
+                      connect(text);
+                    }
+                  }
+                }}
+                onError={(error) => console.error(error)}
+              />
+              <button 
+                onClick={() => setIsScanning(false)}
+                className="absolute top-4 right-4 p-2 bg-black/50 rounded-full text-white hover:bg-black/70"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={() => setIsScanning(true)}
+              className="w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-white"
+            >
+              <QrCode size={20} /> Scan QR Code
+            </button>
+          )}
+
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-neutral-800"></div>
+            <span className="flex-shrink-0 mx-4 text-neutral-500 text-xs font-semibold uppercase tracking-widest">OR ENTER PIN</span>
+            <div className="flex-grow border-t border-neutral-800"></div>
+          </div>
+
           <input 
             type="text"
             value={code}
             onChange={(e) => {
-              let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-              if (val.length > 4) {
-                val = val.slice(0, 4) + '-' + val.slice(4, 8);
-              }
+              let val = e.target.value.replace(/[^0-9]/g, '');
               setCode(val);
-              if (val.length === 9) {
+              if (val.length === 6) {
                 connect(val);
               }
             }}
-            placeholder="ABXZ-4821"
-            maxLength={9}
+            placeholder="123456"
+            maxLength={6}
             className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center text-2xl tracking-widest font-mono text-white focus:border-cyan-500 focus:outline-none"
           />
           
@@ -178,7 +269,7 @@ export function TabletRemote() {
 
           <button 
             onClick={() => connect()}
-            disabled={code.length !== 9 || status === 'connecting'}
+            disabled={code.length !== 6 || status === 'connecting'}
             className={`w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 ${
               status === 'connecting' 
                 ? 'bg-yellow-500 text-black' 
