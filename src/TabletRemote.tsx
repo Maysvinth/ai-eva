@@ -92,8 +92,13 @@ export function TabletRemote() {
               setStatus('idle');
               setErrorMsg('Laptop disconnected');
               clearInterval(pollIntervalRef.current!);
-            } else if (pollData.aiState) {
-              setAiState(pollData.aiState);
+            } else {
+              if (pollData.aiState) {
+                setAiState(pollData.aiState);
+              }
+              if (pollData.commands && pollData.commands.length > 0) {
+                pollData.commands.forEach((cmd: any) => handleTabletCommand(cmd));
+              }
             }
           } catch (e) {
             console.error("Polling error", e);

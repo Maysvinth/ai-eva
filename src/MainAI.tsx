@@ -99,7 +99,7 @@ export function MainAI() {
     } else if (command === 'open_website' && url) {
       window.open(url, '_blank');
     } else if (command === 'execute_task') {
-      if (!isConnected) connect();
+      if (!isConnected) connect(myDeviceCode);
     }
   };
 
@@ -142,7 +142,7 @@ export function MainAI() {
     if (isConnected) {
       disconnect();
       setTimeout(() => {
-        connect();
+        connect(myDeviceCode);
       }, 500);
     }
   };
@@ -260,7 +260,7 @@ export function MainAI() {
         isConnecting={isConnecting}
         isUserSpeaking={isUserSpeaking}
         isAiSpeaking={isAiSpeaking}
-        onConnect={connect}
+        onConnect={() => connect(myDeviceCode)}
         onDisconnect={disconnect}
         voiceName={currentVoice.name}
         voiceColor={currentVoice.color}
@@ -505,7 +505,7 @@ export function MainAI() {
         </div>
         
         <button
-          onClick={isConnected ? disconnect : connect}
+          onClick={() => isConnected ? disconnect() : connect(myDeviceCode)}
           disabled={isConnecting}
           className={`p-4 rounded-full transition-all duration-300 ${
             isConnected 
