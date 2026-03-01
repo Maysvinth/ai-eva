@@ -98,11 +98,15 @@ export function MainAI() {
   };
 
   const handleRemoteCommand = (payload: any) => {
-    const { command, url } = payload;
+    const { command, url, details } = payload;
     if (command === 'play_music') {
       window.open('https://open.spotify.com', '_blank');
     } else if (command === 'open_youtube') {
-      window.open('https://youtube.com', '_blank');
+      if (details) {
+        window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(details)}`, '_blank');
+      } else {
+        window.open('https://youtube.com', '_blank');
+      }
     } else if (command === 'open_website' && url) {
       window.open(url, '_blank');
     } else if (command === 'execute_task') {
@@ -364,7 +368,7 @@ export function MainAI() {
                           <div className="bg-white p-2 rounded-lg shrink-0">
                             {myDeviceCode ? (
                               <QRCodeSVG 
-                                value={`${window.location.origin}/#tablet?code=${myDeviceCode}`} 
+                                value={`${window.location.origin}/#/tablet?code=${myDeviceCode}`} 
                                 size={80} 
                                 level="L"
                               />
@@ -378,11 +382,11 @@ export function MainAI() {
                               <input 
                                 type="text" 
                                 readOnly 
-                                value={`${window.location.origin}/#tablet?code=${myDeviceCode}`}
+                                value={`${window.location.origin}/#/tablet?code=${myDeviceCode}`}
                                 className="w-full bg-black/50 border border-neutral-700 rounded p-2 text-xs text-neutral-300 outline-none"
                               />
                               <button 
-                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/#tablet?code=${myDeviceCode}`)}
+                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/#/tablet?code=${myDeviceCode}`)}
                                 className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded text-neutral-300 transition-colors"
                                 title="Copy Link"
                               >

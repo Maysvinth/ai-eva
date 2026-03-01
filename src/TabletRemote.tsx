@@ -172,7 +172,14 @@ export function TabletRemote() {
           </button>
           
           <button 
-            onClick={() => sendCommand('open_youtube')}
+            onClick={() => {
+              const query = prompt('What do you want to search on YouTube?');
+              if (query) {
+                sendCommand('open_youtube', { details: query });
+              } else {
+                sendCommand('open_youtube');
+              }
+            }}
             className="flex flex-col items-center justify-center gap-3 p-6 bg-neutral-900 border border-neutral-800 rounded-2xl hover:bg-neutral-800 hover:border-red-500/50 transition-all"
           >
             <Play size={32} className="text-red-500" />
@@ -206,7 +213,19 @@ export function TabletRemote() {
           <div className="w-16 h-16 rounded-2xl bg-cyan-900/30 border border-cyan-500/30 flex items-center justify-center mb-4">
             <LinkIcon size={32} className="text-cyan-400" />
           </div>
-          <h1 className="text-2xl font-bold text-white">Connect to Laptop</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">Connect to Laptop</h1>
+            <div className={`px-2 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+              status === 'connecting' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+              status === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+              'bg-neutral-800 text-neutral-400 border border-neutral-700'
+            }`}>
+              {status === 'connecting' && <Loader2 size={12} className="animate-spin" />}
+              {status === 'error' && <X size={12} />}
+              {status === 'idle' && <div className="w-1.5 h-1.5 rounded-full bg-neutral-500" />}
+              {status}
+            </div>
+          </div>
           <p className="text-neutral-400">Enter the 6-digit pairing code shown in your laptop's AI settings.</p>
         </div>
 
