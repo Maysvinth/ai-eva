@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Loader2, ExternalLink, Activity, Moon, GripHorizontal, Settings, X, Check, ChevronLeft, ChevronRight, RefreshCw, Smartphone } from 'lucide-react';
+import { Mic, MicOff, Loader2, ExternalLink, Activity, Moon, GripHorizontal, Settings, X, Check, ChevronLeft, ChevronRight, RefreshCw, Smartphone, Copy } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useGeminiLive } from './useGeminiLive';
 import { ANIME_VOICES } from './voices';
 import { FloatingWidget } from './components/FloatingWidget';
@@ -340,10 +341,10 @@ export function MainAI() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-2 mt-2">
-                        <div className="text-xs text-neutral-400 mb-1 uppercase tracking-widest font-semibold">Enter Code on Tablet</div>
+                      <div className="flex flex-col gap-4 mt-2">
+                        <div className="text-xs text-neutral-400 uppercase tracking-widest font-semibold">Pairing Code</div>
                         
-                        <div className="flex items-center justify-between bg-black/50 border border-neutral-800 rounded-lg p-4 mb-2">
+                        <div className="flex items-center justify-between bg-black/50 border border-neutral-800 rounded-lg p-4">
                           <span className="text-3xl font-mono tracking-widest font-bold text-white tracking-[0.5em]">{myDeviceCode || '------'}</span>
                           <button 
                             onClick={() => {
@@ -356,8 +357,47 @@ export function MainAI() {
                             <RefreshCw size={20} />
                           </button>
                         </div>
+
+                        <div className="text-xs text-neutral-400 uppercase tracking-widest font-semibold mt-2">Direct Link & QR</div>
                         
-                        <div className="flex items-center justify-between text-xs mb-2">
+                        <div className="flex gap-4 items-center bg-black/30 border border-neutral-800 rounded-lg p-4">
+                          <div className="bg-white p-2 rounded-lg shrink-0">
+                            {myDeviceCode ? (
+                              <QRCodeSVG 
+                                value={`${window.location.origin}/#tablet?code=${myDeviceCode}`} 
+                                size={80} 
+                                level="L"
+                              />
+                            ) : (
+                              <div className="w-[80px] h-[80px] bg-neutral-200 animate-pulse rounded" />
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-2 w-full overflow-hidden">
+                            <div className="text-xs text-neutral-400">Scan QR or use link:</div>
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="text" 
+                                readOnly 
+                                value={`${window.location.origin}/#tablet?code=${myDeviceCode}`}
+                                className="w-full bg-black/50 border border-neutral-700 rounded p-2 text-xs text-neutral-300 outline-none"
+                              />
+                              <button 
+                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/#tablet?code=${myDeviceCode}`)}
+                                className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded text-neutral-300 transition-colors"
+                                title="Copy Link"
+                              >
+                                <Copy size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3 text-xs text-cyan-200/80">
+                          <strong className="text-cyan-400 block mb-1">Backup Method:</strong>
+                          If the tablet UI is broken, simply open the direct link above in any browser on your tablet to automatically join the session.
+                        </div>
+                        
+                        <div className="flex items-center justify-between text-xs mt-2">
                           <span className="text-cyan-400 flex items-center gap-1.5">
                             <Loader2 size={12} className="animate-spin" /> Waiting for tablet...
                           </span>
