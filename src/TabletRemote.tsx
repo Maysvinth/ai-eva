@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check, QrCode, X } from 'lucide-react';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check, X } from 'lucide-react';
 import { FloatingWidget } from './components/FloatingWidget';
 
 export function TabletRemote() {
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(['', '', '', '', '', '']);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
-  const pollIntervalRef = useRef<number | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     // Check if code is in URL
@@ -18,7 +17,7 @@ export function TabletRemote() {
         const urlParams = new URLSearchParams(hashParts[1]);
         const codeFromUrl = urlParams.get('code');
         if (codeFromUrl && codeFromUrl.length === 6) {
-          setCode(codeFromUrl);
+          setCode(codeFromUrl.split(''));
           connect(codeFromUrl);
         }
       }
@@ -27,7 +26,7 @@ export function TabletRemote() {
     }
 
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (wsRef.current) wsRef.current.close();
     };
   }, []);
 
@@ -61,7 +60,7 @@ export function TabletRemote() {
   });
 
   const connect = async (codeToUse?: string) => {
-    const finalCode = codeToUse || code;
+    const finalCode = typeof codeToUse === 'string' ? codeToUse : code.join('');
     if (!finalCode || finalCode.length !== 6) {
       setErrorMsg('Please enter a valid 6-digit code');
       return;
@@ -71,43 +70,53 @@ export function TabletRemote() {
     setErrorMsg('');
 
     try {
-      const res = await fetch('/api/device/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: finalCode })
-      });
-      const data = await res.json();
+      if (wsRef.current) wsRef.current.close();
       
-      if (data.success) {
-        setStatus('connected');
-        
-        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-        
-        pollIntervalRef.current = window.setInterval(async () => {
-          try {
-            const pollRes = await fetch(`/api/device/poll-tablet?code=${finalCode}`);
-            const pollData = await pollRes.json();
-            
-            if (pollData.status === 'disconnected') {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/?code=${finalCode}&role=tablet`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'status') {
+            if (data.status === 'connected') {
+              setStatus('connected');
+              if (data.aiState) {
+                setAiState(data.aiState);
+              }
+            } else if (data.status === 'waiting' || data.status === 'disconnected') {
               setStatus('idle');
               setErrorMsg('Laptop disconnected');
-              clearInterval(pollIntervalRef.current!);
-            } else {
-              if (pollData.aiState) {
-                setAiState(pollData.aiState);
-              }
-              if (pollData.commands && pollData.commands.length > 0) {
-                pollData.commands.forEach((cmd: any) => handleTabletCommand(cmd));
-              }
             }
-          } catch (e) {
-            console.error("Polling error", e);
+          } else if (data.type === 'state') {
+            if (data.aiState) {
+              setAiState(data.aiState);
+            }
+          } else if (data.type === 'command') {
+            handleTabletCommand(data.command);
           }
-        }, 2000);
-      } else {
+        } catch (e) {
+          console.error('WebSocket message error:', e);
+        }
+      };
+
+      ws.onclose = (event) => {
+        if (event.code === 1008) {
+          setStatus('error');
+          setErrorMsg('Invalid or expired code');
+        } else {
+          setStatus('idle');
+          setErrorMsg('Connection closed');
+        }
+      };
+      
+      ws.onerror = () => {
         setStatus('error');
-        setErrorMsg(data.error || 'Connection failed');
-      }
+        setErrorMsg('Connection error');
+      };
+
     } catch (e) {
       setStatus('error');
       setErrorMsg('Connection error');
@@ -115,16 +124,12 @@ export function TabletRemote() {
   };
 
   const sendCommand = (cmd: string, args?: any) => {
-    if (status === 'connected') {
-      fetch('/api/device/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code,
-          command: { command: cmd, ...args },
-          target: 'laptop'
-        })
-      }).catch(console.error);
+    if (status === 'connected' && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'command',
+        target: 'laptop',
+        command: { command: cmd, ...args }
+      }));
     }
   };
 
@@ -146,11 +151,9 @@ export function TabletRemote() {
           </div>
           <button 
             onClick={() => {
-              fetch('/api/device/disconnect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
-              }).catch(console.error);
+              if (wsRef.current) {
+                wsRef.current.close();
+              }
               setStatus('idle');
             }}
             className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
@@ -204,69 +207,41 @@ export function TabletRemote() {
             <LinkIcon size={32} className="text-cyan-400" />
           </div>
           <h1 className="text-2xl font-bold text-white">Connect to Laptop</h1>
-          <p className="text-neutral-400">Enter the 8-character pairing code shown in your laptop's AI settings.</p>
+          <p className="text-neutral-400">Enter the 6-digit pairing code shown in your laptop's AI settings.</p>
         </div>
 
         <div className="w-full flex flex-col gap-4">
-          {isScanning ? (
-            <div className="w-full rounded-xl overflow-hidden border border-neutral-800 relative bg-black aspect-square">
-              <Scanner
-                onScan={(result) => {
-                  if (result && result.length > 0) {
-                    const text = result[0].rawValue;
-                    if (text.includes('code=')) {
-                      const urlParams = new URLSearchParams(text.split('?')[1]);
-                      const codeFromUrl = urlParams.get('code');
-                      if (codeFromUrl && codeFromUrl.length === 6) {
-                        setIsScanning(false);
-                        setCode(codeFromUrl);
-                        connect(codeFromUrl);
-                      }
-                    } else if (text.length === 6 && /^\d+$/.test(text)) {
-                      setIsScanning(false);
-                      setCode(text);
-                      connect(text);
-                    }
+          <div className="flex justify-between gap-2">
+            {[0, 1, 2, 3, 4, 5].map((index) => (
+              <input
+                key={index}
+                ref={(el) => { inputRefs.current[index] = el; }}
+                type="text"
+                maxLength={1}
+                value={code[index]}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  const newCode = [...code];
+                  newCode[index] = val;
+                  setCode(newCode);
+                  
+                  if (val && index < 5) {
+                    inputRefs.current[index + 1]?.focus();
+                  }
+                  
+                  if (newCode.join('').length === 6) {
+                    connect(newCode.join(''));
                   }
                 }}
-                onError={(error) => console.error(error)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Backspace' && !code[index] && index > 0) {
+                    inputRefs.current[index - 1]?.focus();
+                  }
+                }}
+                className="w-12 h-14 bg-neutral-900 border border-neutral-800 rounded-xl text-center text-2xl font-mono text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
               />
-              <button 
-                onClick={() => setIsScanning(false)}
-                className="absolute top-4 right-4 p-2 bg-black/50 rounded-full text-white hover:bg-black/70"
-              >
-                <X size={20} />
-              </button>
-            </div>
-          ) : (
-            <button 
-              onClick={() => setIsScanning(true)}
-              className="w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-white"
-            >
-              <QrCode size={20} /> Scan QR Code
-            </button>
-          )}
-
-          <div className="relative flex items-center py-2">
-            <div className="flex-grow border-t border-neutral-800"></div>
-            <span className="flex-shrink-0 mx-4 text-neutral-500 text-xs font-semibold uppercase tracking-widest">OR ENTER PIN</span>
-            <div className="flex-grow border-t border-neutral-800"></div>
+            ))}
           </div>
-
-          <input 
-            type="text"
-            value={code}
-            onChange={(e) => {
-              let val = e.target.value.replace(/[^0-9]/g, '');
-              setCode(val);
-              if (val.length === 6) {
-                connect(val);
-              }
-            }}
-            placeholder="123456"
-            maxLength={6}
-            className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center text-2xl tracking-widest font-mono text-white focus:border-cyan-500 focus:outline-none"
-          />
           
           {errorMsg && (
             <div className="text-red-400 text-sm text-center font-medium">{errorMsg}</div>
@@ -274,7 +249,7 @@ export function TabletRemote() {
 
           <button 
             onClick={() => connect()}
-            disabled={code.length !== 6 || status === 'connecting'}
+            disabled={code.join('').length !== 6 || status === 'connecting'}
             className={`w-full py-4 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2 ${
               status === 'connecting' 
                 ? 'bg-yellow-500 text-black' 

@@ -57,7 +57,7 @@ export function WidgetAI() {
         <div className="flex flex-col gap-3">
           {/* Connect/Disconnect Box */}
           <button
-            onClick={isConnected ? disconnect : connect}
+            onClick={() => isConnected ? disconnect() : connect()}
             disabled={isConnecting}
             className={`relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-mono tracking-widest uppercase transition-all duration-300 overflow-hidden ${
               isConnected 
