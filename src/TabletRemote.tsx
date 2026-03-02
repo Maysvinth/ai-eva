@@ -35,6 +35,38 @@ export function TabletRemote() {
 
   const handleTabletCommand = (payload: any) => {
     const { action, target, details } = payload;
+    
+    if (action === 'OPEN_APP') {
+      let scheme = '';
+      let appName = target.toLowerCase();
+      
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+      if (appName === 'browser') {
+        window.open('https://www.google.com', '_blank');
+        return;
+      }
+
+      if (appName === 'spotify') {
+        scheme = 'spotify://';
+      } else if (appName === 'youtube') {
+        scheme = isIOS ? 'youtube://' : 'vnd.youtube://';
+      }
+
+      if (scheme) {
+        const start = Date.now();
+        window.location.href = scheme;
+        
+        setTimeout(() => {
+          if (Date.now() - start < 2500 && !document.hidden) {
+            setErrorMsg(`${target} is not available or not installed on this device.`);
+            setTimeout(() => setErrorMsg(''), 5000); // Clear after 5 seconds
+          }
+        }, 2000);
+      }
+      return;
+    }
+
     if (target === 'YOUTUBE') {
       if (action === 'PLAY') {
         window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(details)}`, '_blank');
@@ -160,6 +192,12 @@ export function TabletRemote() {
             <Unlink size={20} />
           </button>
         </div>
+
+        {errorMsg && (
+          <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-sm text-center animate-in fade-in slide-in-from-top-4">
+            {errorMsg}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <button 

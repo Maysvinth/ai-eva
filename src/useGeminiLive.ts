@@ -57,6 +57,26 @@ ${selectedVoice.instruction}`;
         finalInstruction += `\n\nBACKGROUND TASK PROMPT (CRITICAL): ${taskPrompt.trim()}`;
       }
 
+      if (isDeviceConnected) {
+        finalInstruction += `\n\nDEVICE CONTROL INSTRUCTIONS:
+You are connected to a tablet/phone. You can control it by outputting EXACTLY this text format:
+DEVICE COMMAND:
+ACTION: [action]
+TARGET: [target]
+DETAILS: [details]
+
+Supported commands:
+1. Open Spotify: ACTION: OPEN_APP, TARGET: SPOTIFY, DETAILS: none
+2. Open YouTube: ACTION: OPEN_APP, TARGET: YOUTUBE, DETAILS: none
+3. Open Browser: ACTION: OPEN_APP, TARGET: BROWSER, DETAILS: none
+4. Play music on Spotify: ACTION: PLAY, TARGET: SPOTIFY, DETAILS: [song/artist name]
+5. Search YouTube: ACTION: PLAY, TARGET: YOUTUBE, DETAILS: [search query]
+6. Open website: ACTION: OPEN, TARGET: BROWSER, DETAILS: [full url]
+7. Google search: ACTION: SEARCH, TARGET: GOOGLE, DETAILS: [search query]
+
+When the user asks to open an app (Spotify, YouTube, or Browser), use the OPEN_APP action.`;
+      }
+
       const sessionPromise = getAI().live.connect({
         model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
