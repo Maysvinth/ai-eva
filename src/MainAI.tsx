@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Loader2, ExternalLink, Activity, Moon, GripHorizontal, Settings, X, Check, ChevronLeft, ChevronRight, RefreshCw, Smartphone, Copy } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import Peer from 'peerjs';
 import { useGeminiLive } from './useGeminiLive';
 import { ANIME_VOICES } from './voices';
 import { FloatingWidget } from './components/FloatingWidget';
@@ -27,7 +28,8 @@ export function MainAI() {
   
   const [myDeviceCode, setMyDeviceCode] = useState('');
   const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'connected' | 'expired'>('idle');
-  const wsRef = useRef<WebSocket | null>(null);
+  const peerRef = useRef<Peer | null>(null);
+  const connRef = useRef<any>(null);
 
   const [activeTab, setActiveTab] = useState<'voice' | 'device' | 'general'>('voice');
 
@@ -44,53 +46,65 @@ export function MainAI() {
     startPairing();
     
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      if (connRef.current) connRef.current.close();
+      if (peerRef.current) peerRef.current.destroy();
     };
   }, []);
 
   const startPairing = async () => {
     try {
       setPairingStatus('waiting');
-      const res = await fetch('/api/device/register', { method: 'POST' });
-      const data = await res.json();
-      const code = data.code;
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
       setMyDeviceCode(code);
       
-      if (wsRef.current) wsRef.current.close();
+      if (peerRef.current) peerRef.current.destroy();
       
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/?code=${code}&role=laptop`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      const peerId = `ais-laptop-${code}`;
+      const peer = new Peer(peerId);
+      peerRef.current = peer;
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'status') {
-            if (data.status === 'connected') {
-              setPairingStatus('connected');
-              localStorage.setItem('isDeviceConnected', 'true');
-            } else if (data.status === 'waiting') {
-              setPairingStatus('waiting');
-              localStorage.setItem('isDeviceConnected', 'false');
-            } else if (data.status === 'disconnected') {
-              setPairingStatus('idle');
-              localStorage.setItem('isDeviceConnected', 'false');
-              // Auto-regenerate
-              startPairing();
+      peer.on('open', (id) => {
+        console.log('Laptop peer ready:', id);
+      });
+
+      peer.on('connection', (conn) => {
+        connRef.current = conn;
+        
+        conn.on('open', () => {
+          setPairingStatus('connected');
+          localStorage.setItem('isDeviceConnected', 'true');
+          
+          // Send initial state
+          conn.send({
+            type: 'state',
+            aiState: {
+              isConnected,
+              isUserSpeaking,
+              isAiSpeaking,
+              voiceName: currentVoice.name,
+              voiceColor: currentVoice.color
             }
-          } else if (data.type === 'command') {
+          });
+        });
+
+        conn.on('data', (data: any) => {
+          if (data.type === 'command') {
             handleRemoteCommand(data.command);
           }
-        } catch (e) {
-          console.error('WebSocket message error:', e);
-        }
-      };
+        });
 
-      ws.onclose = () => {
+        conn.on('close', () => {
+          setPairingStatus('idle');
+          localStorage.setItem('isDeviceConnected', 'false');
+          startPairing();
+        });
+      });
+
+      peer.on('error', (err) => {
+        console.error('PeerJS error:', err);
         setPairingStatus('idle');
         localStorage.setItem('isDeviceConnected', 'false');
-      };
+      });
       
     } catch (e) {
       console.error("Failed to register device", e);
@@ -115,8 +129,8 @@ export function MainAI() {
   };
 
   useEffect(() => {
-    if (pairingStatus === 'connected' && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
+    if (pairingStatus === 'connected' && connRef.current) {
+      connRef.current.send({
         type: 'state',
         aiState: {
           isConnected,
@@ -125,17 +139,17 @@ export function MainAI() {
           voiceName: currentVoice.name,
           voiceColor: currentVoice.color
         }
-      }));
+      });
     }
   }, [isConnected, isUserSpeaking, isAiSpeaking, currentVoice, pairingStatus]);
 
   useEffect(() => {
-    if (sendTabletCommand && pairingStatus === 'connected' && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
+    if (sendTabletCommand && pairingStatus === 'connected' && connRef.current) {
+      connRef.current.send({
         type: 'command',
         target: 'tablet',
         command: sendTabletCommand
-      }));
+      });
     }
   }, [sendTabletCommand, pairingStatus]);
 
@@ -334,7 +348,8 @@ export function MainAI() {
                         </div>
                         <button 
                           onClick={() => {
-                            if (wsRef.current) wsRef.current.close();
+                            if (connRef.current) connRef.current.close();
+                            if (peerRef.current) peerRef.current.destroy();
                             setPairingStatus('idle');
                             localStorage.setItem('isDeviceConnected', 'false');
                             startPairing();
@@ -352,7 +367,8 @@ export function MainAI() {
                           <span className="text-3xl font-mono tracking-widest font-bold text-white tracking-[0.5em]">{myDeviceCode || '------'}</span>
                           <button 
                             onClick={() => {
-                              if (wsRef.current) wsRef.current.close();
+                              if (connRef.current) connRef.current.close();
+                              if (peerRef.current) peerRef.current.destroy();
                               startPairing();
                             }}
                             className="p-2 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"

@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check, X } from 'lucide-react';
 import { FloatingWidget } from './components/FloatingWidget';
+import Peer from 'peerjs';
 
 export function TabletRemote() {
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const wsRef = useRef<WebSocket | null>(null);
+  const peerRef = useRef<Peer | null>(null);
+  const connRef = useRef<any>(null);
 
   useEffect(() => {
     // Check if code is in URL
@@ -26,7 +28,8 @@ export function TabletRemote() {
     }
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      if (connRef.current) connRef.current.close();
+      if (peerRef.current) peerRef.current.destroy();
     };
   }, []);
 
@@ -70,52 +73,50 @@ export function TabletRemote() {
     setErrorMsg('');
 
     try {
-      if (wsRef.current) wsRef.current.close();
+      if (peerRef.current) peerRef.current.destroy();
       
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/?code=${finalCode}&role=tablet`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      const peer = new Peer();
+      peerRef.current = peer;
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'status') {
-            if (data.status === 'connected') {
-              setStatus('connected');
-              if (data.aiState) {
-                setAiState(data.aiState);
-              }
-            } else if (data.status === 'waiting' || data.status === 'disconnected') {
-              setStatus('idle');
-              setErrorMsg('Laptop disconnected');
-            }
-          } else if (data.type === 'state') {
+      peer.on('open', (id) => {
+        const targetPeerId = `ais-laptop-${finalCode}`;
+        const conn = peer.connect(targetPeerId);
+        connRef.current = conn;
+
+        conn.on('open', () => {
+          setStatus('connected');
+        });
+
+        conn.on('data', (data: any) => {
+          if (data.type === 'state') {
             if (data.aiState) {
               setAiState(data.aiState);
             }
           } else if (data.type === 'command') {
             handleTabletCommand(data.command);
           }
-        } catch (e) {
-          console.error('WebSocket message error:', e);
-        }
-      };
+        });
 
-      ws.onclose = (event) => {
-        if (event.code === 1008) {
+        conn.on('close', () => {
+          setStatus('idle');
+          setErrorMsg('Laptop disconnected');
+        });
+        
+        conn.on('error', (err) => {
           setStatus('error');
+          setErrorMsg('Connection error');
+        });
+      });
+
+      peer.on('error', (err) => {
+        console.error('PeerJS error:', err);
+        setStatus('error');
+        if (err.type === 'peer-unavailable') {
           setErrorMsg('Invalid or expired code');
         } else {
-          setStatus('idle');
-          setErrorMsg('Connection closed');
+          setErrorMsg('Connection error');
         }
-      };
-      
-      ws.onerror = () => {
-        setStatus('error');
-        setErrorMsg('Connection error');
-      };
+      });
 
     } catch (e) {
       setStatus('error');
@@ -124,12 +125,11 @@ export function TabletRemote() {
   };
 
   const sendCommand = (cmd: string, args?: any) => {
-    if (status === 'connected' && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
+    if (status === 'connected' && connRef.current) {
+      connRef.current.send({
         type: 'command',
-        target: 'laptop',
         command: { command: cmd, ...args }
-      }));
+      });
     }
   };
 
@@ -151,9 +151,8 @@ export function TabletRemote() {
           </div>
           <button 
             onClick={() => {
-              if (wsRef.current) {
-                wsRef.current.close();
-              }
+              if (connRef.current) connRef.current.close();
+              if (peerRef.current) peerRef.current.destroy();
               setStatus('idle');
             }}
             className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
