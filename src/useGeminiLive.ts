@@ -33,7 +33,15 @@ export function useGeminiLive() {
   const connect = async (deviceCode?: string) => {
     setIsConnecting(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 16000
+        } 
+      });
       streamRef.current = stream;
       
       const audioContext = new AudioContext({ sampleRate: 16000 });
