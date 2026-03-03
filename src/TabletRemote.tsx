@@ -3,6 +3,33 @@ import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink,
 import { FloatingWidget } from './components/FloatingWidget';
 import Peer from 'peerjs';
 
+// Patch PeerJS to prevent unhandled promise rejections from its internal socket
+if (Peer && Peer.prototype) {
+  const originalInit = (Peer.prototype as any)._initializeServerConnection;
+  if (originalInit) {
+    (Peer.prototype as any)._initializeServerConnection = function() {
+      if (this._socket && typeof this._socket.start === 'function' && !this._socket.__patched) {
+        const originalStart = this._socket.start;
+        this._socket.start = function() {
+          try {
+            const promise = originalStart.apply(this, arguments);
+            if (promise && typeof promise.catch === 'function') {
+              promise.catch((err: any) => {
+                // Suppress internal unhandled rejection
+              });
+            }
+            return promise;
+          } catch (e) {
+            // Ignore synchronous errors
+          }
+        };
+        this._socket.__patched = true;
+      }
+      return originalInit.apply(this, arguments);
+    };
+  }
+}
+
 export function TabletRemote() {
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);

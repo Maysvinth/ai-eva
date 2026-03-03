@@ -2,6 +2,34 @@ import { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Loader2, ExternalLink, Activity, Moon, GripHorizontal, Settings, X, Check, ChevronLeft, ChevronRight, RefreshCw, Smartphone, Copy } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Peer from 'peerjs';
+
+// Patch PeerJS to prevent unhandled promise rejections from its internal socket
+if (Peer && Peer.prototype) {
+  const originalInit = (Peer.prototype as any)._initializeServerConnection;
+  if (originalInit) {
+    (Peer.prototype as any)._initializeServerConnection = function() {
+      if (this._socket && typeof this._socket.start === 'function' && !this._socket.__patched) {
+        const originalStart = this._socket.start;
+        this._socket.start = function() {
+          try {
+            const promise = originalStart.apply(this, arguments);
+            if (promise && typeof promise.catch === 'function') {
+              promise.catch((err: any) => {
+                // Suppress internal unhandled rejection
+              });
+            }
+            return promise;
+          } catch (e) {
+            // Ignore synchronous errors
+          }
+        };
+        this._socket.__patched = true;
+      }
+      return originalInit.apply(this, arguments);
+    };
+  }
+}
+
 import { useGeminiLive } from './useGeminiLive';
 import { ANIME_VOICES } from './voices';
 import { FloatingWidget } from './components/FloatingWidget';
