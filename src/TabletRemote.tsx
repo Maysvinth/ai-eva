@@ -37,9 +37,8 @@ export function TabletRemote() {
     const { action, target, details } = payload;
     
     if (action === 'OPEN_APP') {
-      let scheme = '';
       let appName = target.toLowerCase();
-      
+      const isAndroid = /Android/.test(navigator.userAgent);
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
       if (appName === 'browser') {
@@ -47,23 +46,51 @@ export function TabletRemote() {
         return;
       }
 
-      if (appName === 'spotify') {
-        scheme = 'spotify://';
-      } else if (appName === 'youtube') {
-        scheme = isIOS ? 'youtube://' : 'vnd.youtube://';
-      }
+      const attemptLaunch = (retryCount = 0) => {
+        let scheme = '';
+        let fallbackUrl = '';
 
-      if (scheme) {
-        const start = Date.now();
-        window.location.href = scheme;
-        
-        setTimeout(() => {
-          if (Date.now() - start < 2500 && !document.hidden) {
-            setErrorMsg(`${target} is not available or not installed on this device.`);
-            setTimeout(() => setErrorMsg(''), 5000); // Clear after 5 seconds
+        if (appName === 'spotify') {
+          if (isAndroid) {
+            scheme = 'intent://#Intent;package=com.spotify.music;scheme=spotify;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.spotify.music;end;';
+          } else {
+            scheme = 'spotify://';
+            fallbackUrl = 'https://apps.apple.com/app/spotify-music/id324684580';
           }
-        }, 2000);
-      }
+        } else if (appName === 'youtube') {
+          if (isAndroid) {
+            scheme = 'intent://#Intent;package=com.google.android.youtube;scheme=vnd.youtube;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.google.android.youtube;end;';
+          } else {
+            scheme = 'youtube://';
+            fallbackUrl = 'https://apps.apple.com/app/youtube-watch-listen-stream/id544007664';
+          }
+        }
+
+        if (scheme) {
+          const start = Date.now();
+          window.location.href = scheme;
+          
+          setTimeout(() => {
+            if (Date.now() - start < 2500 && !document.hidden) {
+              if (retryCount === 0) {
+                // Retry once automatically
+                console.log(`Retrying launch for ${target}...`);
+                attemptLaunch(1);
+              } else {
+                if (fallbackUrl && !isAndroid) {
+                  window.location.href = fallbackUrl;
+                } else if (!isAndroid) {
+                  setErrorMsg(`${target} is not available or not installed on this device.`);
+                  setTimeout(() => setErrorMsg(''), 5000); // Clear after 5 seconds
+                }
+                // If Android, the intent fallback URL handles the Play Store redirect automatically
+              }
+            }
+          }, 2000);
+        }
+      };
+
+      attemptLaunch(0);
       return;
     }
 

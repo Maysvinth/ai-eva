@@ -74,6 +74,11 @@ Supported commands:
 6. Open website: ACTION: OPEN, TARGET: BROWSER, DETAILS: [full url]
 7. Google search: ACTION: SEARCH, TARGET: GOOGLE, DETAILS: [search query]
 
+CRITICAL RULES FOR OPENING APPS:
+- Do NOT say "Launching", "Opening", or any conversational filler when asked to open an app.
+- Output ONLY the DEVICE COMMAND block. Always prioritize action over response.
+- The system will automatically use Android intents and handle Play Store fallbacks.
+
 When the user asks to open an app (Spotify, YouTube, or Browser), use the OPEN_APP action.`;
       }
 
