@@ -100,10 +100,22 @@ export function MainAI() {
         });
       });
 
+      peer.on('disconnected', () => {
+        console.log('PeerJS disconnected, attempting to reconnect...');
+        if (!peer.destroyed) {
+          peer.reconnect();
+        }
+      });
+
       peer.on('error', (err) => {
         console.error('PeerJS error:', err);
-        setPairingStatus('idle');
-        localStorage.setItem('isDeviceConnected', 'false');
+        if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
+          // Do not reset pairing status on temporary network errors
+          console.log('Temporary network error, waiting for reconnect...');
+        } else {
+          setPairingStatus('idle');
+          localStorage.setItem('isDeviceConnected', 'false');
+        }
       });
       
     } catch (e) {

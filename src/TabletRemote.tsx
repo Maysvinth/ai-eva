@@ -167,12 +167,22 @@ export function TabletRemote() {
         });
       });
 
+      peer.on('disconnected', () => {
+        console.log('PeerJS disconnected, attempting to reconnect...');
+        if (!peer.destroyed) {
+          peer.reconnect();
+        }
+      });
+
       peer.on('error', (err) => {
         console.error('PeerJS error:', err);
-        setStatus('error');
         if (err.type === 'peer-unavailable') {
+          setStatus('error');
           setErrorMsg('Invalid or expired code');
+        } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
+          console.log('Temporary network error, waiting for reconnect...');
         } else {
+          setStatus('error');
           setErrorMsg('Connection error');
         }
       });

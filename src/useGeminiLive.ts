@@ -105,6 +105,7 @@ When the user asks to open an app (Spotify, YouTube, or Browser), use the OPEN_A
             setIsConnecting(false);
             
             processor.onaudioprocess = (e) => {
+              if (!processorRef.current) return;
               if (localStorage.getItem('useLaptopAudio') === 'false') return;
               
               const inputData = e.inputBuffer.getChannelData(0);
@@ -130,11 +131,22 @@ When the user asks to open an app (Spotify, YouTube, or Browser), use the OPEN_A
               const base64Data = btoa(binary);
 
               sessionPromise.then((session) => {
-                session.sendRealtimeInput({
-                  media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-                });
+                if (!processorRef.current) return;
+                try {
+                  const result = session.sendRealtimeInput({
+                    media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                  });
+                  // If it returns a promise, catch it
+                  if (result && typeof (result as any).catch === 'function') {
+                    (result as any).catch((err: any) => {
+                      // Ignore websocket closed errors
+                    });
+                  }
+                } catch (err) {
+                  // Ignore synchronous websocket closed errors
+                }
               }).catch((e) => {
-                console.error("Failed to send audio:", e);
+                // Ignore session promise rejection
               });
             };
             
