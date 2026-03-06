@@ -61,10 +61,10 @@ export function TabletRemote() {
   }, []);
 
   const handleTabletCommand = (payload: any) => {
-    const { action, target, details } = payload;
+    const { action, app, command, url, message } = payload;
     
-    if (action === 'OPEN_APP') {
-      let appName = target.toLowerCase();
+    if (action === 'open_app' || action === 'play_music') {
+      let appName = (app || '').toLowerCase();
       const isAndroid = /Android/.test(navigator.userAgent);
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
@@ -101,19 +101,22 @@ export function TabletRemote() {
             if (Date.now() - start < 2500 && !document.hidden) {
               if (retryCount === 0) {
                 // Retry once automatically
-                console.log(`Retrying launch for ${target}...`);
+                console.log(`Retrying launch for ${appName}...`);
                 attemptLaunch(1);
               } else {
                 if (fallbackUrl && !isAndroid) {
                   window.location.href = fallbackUrl;
                 } else if (!isAndroid) {
-                  setErrorMsg(`${target} is not available or not installed on this device.`);
+                  setErrorMsg(`${appName} is not available or not installed on this device.`);
                   setTimeout(() => setErrorMsg(''), 5000); // Clear after 5 seconds
                 }
                 // If Android, the intent fallback URL handles the Play Store redirect automatically
               }
             }
           }, 2000);
+        } else if (appName) {
+            // Fallback for unsupported apps
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(appName)}`, '_blank');
         }
       };
 
@@ -121,22 +124,13 @@ export function TabletRemote() {
       return;
     }
 
-    if (target === 'YOUTUBE') {
-      if (action === 'PLAY') {
-        window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(details)}`, '_blank');
-      }
-    } else if (target === 'SPOTIFY') {
-      if (action === 'PLAY') {
-        window.open(`https://open.spotify.com/search/${encodeURIComponent(details)}`, '_blank');
-      }
-    } else if (target === 'BROWSER') {
-      if (action === 'OPEN') {
-        window.open(details, '_blank');
-      }
-    } else if (target === 'GOOGLE') {
-      if (action === 'SEARCH') {
-        window.open(`https://www.google.com/search?q=${encodeURIComponent(details)}`, '_blank');
-      }
+    if (action === 'open_url' && url) {
+      window.open(url, '_blank');
+    } else if (action === 'control_media') {
+      console.log('Media control requested:', command);
+    } else if (action === 'error') {
+      setErrorMsg(message || 'Error executing command');
+      setTimeout(() => setErrorMsg(''), 5000);
     }
   };
 

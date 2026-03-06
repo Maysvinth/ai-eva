@@ -66,28 +66,56 @@ ${selectedVoice.instruction}`;
       }
 
       if (isDeviceConnected) {
-        finalInstruction += `\n\nDEVICE CONTROL INSTRUCTIONS:
-You are connected to a tablet/phone. You can control it by outputting EXACTLY this text format:
-DEVICE COMMAND:
-ACTION: [action]
-TARGET: [target]
-DETAILS: [details]
+        finalInstruction = `You are an AI device controller connected to a tablet.
 
-Supported commands:
-1. Open Spotify: ACTION: OPEN_APP, TARGET: SPOTIFY, DETAILS: none
-2. Open YouTube: ACTION: OPEN_APP, TARGET: YOUTUBE, DETAILS: none
-3. Open Browser: ACTION: OPEN_APP, TARGET: BROWSER, DETAILS: none
-4. Play music on Spotify: ACTION: PLAY, TARGET: SPOTIFY, DETAILS: [song/artist name]
-5. Search YouTube: ACTION: PLAY, TARGET: YOUTUBE, DETAILS: [search query]
-6. Open website: ACTION: OPEN, TARGET: BROWSER, DETAILS: [full url]
-7. Google search: ACTION: SEARCH, TARGET: GOOGLE, DETAILS: [search query]
+Your job is to convert user requests into simple device commands.
+Always respond ONLY with JSON. Do not explain anything.
 
-CRITICAL RULES FOR OPENING APPS:
-- Do NOT say "Launching", "Opening", or any conversational filler when asked to open an app.
-- Output ONLY the DEVICE COMMAND block. Always prioritize action over response.
-- The system will automatically use Android intents and handle Play Store fallbacks.
+Commands supported:
+open_app
+play_music
+open_url
+control_media
 
-When the user asks to open an app (Spotify, YouTube, or Browser), use the OPEN_APP action.`;
+Examples:
+
+User: open spotify
+Response:
+{
+  "action": "open_app",
+  "app": "spotify"
+}
+
+User: play music on spotify
+Response:
+{
+  "action": "play_music",
+  "app": "spotify"
+}
+
+User: open youtube
+Response:
+{
+  "action": "open_app",
+  "app": "youtube"
+}
+
+User: pause music
+Response:
+{
+  "action": "control_media",
+  "command": "pause"
+}
+
+Rules:
+- Never respond with normal text.
+- Only return valid JSON.
+- Keep responses short.
+- If the app requested is not installed, respond with:
+{
+  "action": "error",
+  "message": "app_not_found"
+}`;
       }
 
       const sessionPromise = getAI().live.connect({
@@ -164,15 +192,18 @@ When the user asks to open an app (Spotify, YouTube, or Browser), use the OPEN_A
                   setCompanionText(prev => {
                     const newText = prev + part.text;
                     
-                    // Parse DEVICE COMMAND
-                    if (newText.includes('DEVICE COMMAND:')) {
-                      // Require a newline after details, or wait for turnComplete
-                      const match = newText.match(/DEVICE COMMAND:\nACTION: (.*?)\nTARGET: (.*?)\nDETAILS: (.*?)(?:\n|$)/);
-                      if (match && (newText.endsWith('\n') || message.serverContent?.turnComplete)) {
-                        const [_, action, target, details] = match;
-                        setSendTabletCommand({ action: action.trim(), target: target.trim(), details: details.trim(), ts: Date.now() });
-                        return ''; // Clear after sending
+                    // Try to parse as JSON
+                    try {
+                      const jsonMatch = newText.match(/\{[\s\S]*\}/);
+                      if (jsonMatch) {
+                        const parsed = JSON.parse(jsonMatch[0]);
+                        if (parsed.action) {
+                          setSendTabletCommand({ ...parsed, ts: Date.now() });
+                          return ''; // Clear after sending
+                        }
                       }
+                    } catch (e) {
+                      // Not valid JSON yet, wait for more chunks
                     }
                     
                     // Auto-open links if they are clearly labeled
@@ -191,14 +222,16 @@ When the user asks to open an app (Spotify, YouTube, or Browser), use the OPEN_A
             
             if (message.serverContent?.turnComplete) {
               setCompanionText(prev => {
-                if (prev.includes('DEVICE COMMAND:')) {
-                  const match = prev.match(/DEVICE COMMAND:\nACTION: (.*?)\nTARGET: (.*?)\nDETAILS: (.*?)(?:\n|$)/);
-                  if (match) {
-                    const [_, action, target, details] = match;
-                    setSendTabletCommand({ action: action.trim(), target: target.trim(), details: details.trim(), ts: Date.now() });
-                    return '';
+                try {
+                  const jsonMatch = prev.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    if (parsed.action) {
+                      setSendTabletCommand({ ...parsed, ts: Date.now() });
+                      return '';
+                    }
                   }
-                }
+                } catch (e) {}
                 return prev;
               });
             }
