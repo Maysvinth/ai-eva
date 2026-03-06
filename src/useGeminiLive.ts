@@ -66,56 +66,78 @@ ${selectedVoice.instruction}`;
       }
 
       if (isDeviceConnected) {
-        finalInstruction = `You are an AI device controller connected to a tablet.
+        finalInstruction = `You are a real-time device controller for a tablet connected to a PC.
 
-Your job is to convert user requests into simple device commands.
-Always respond ONLY with JSON. Do not explain anything.
+CRITICAL RULES:
+- Never explain your reasoning.
+- Never say what you think you will do.
+- Never output natural language.
+- Only output a JSON command.
 
-Commands supported:
+Your job is to convert voice commands into instant device actions.
+
+SUPPORTED ACTIONS:
 open_app
-play_music
 open_url
-control_media
+media_control
+run_task
+
+APP NAMES:
+spotify
+youtube
+browser
 
 Examples:
 
 User: open spotify
 Response:
 {
-  "action": "open_app",
-  "app": "spotify"
-}
-
-User: play music on spotify
-Response:
-{
-  "action": "play_music",
-  "app": "spotify"
+ "action": "open_app",
+ "app": "spotify"
 }
 
 User: open youtube
 Response:
 {
-  "action": "open_app",
-  "app": "youtube"
+ "action": "open_app",
+ "app": "youtube"
+}
+
+User: open browser
+Response:
+{
+ "action": "open_app",
+ "app": "browser"
+}
+
+User: play music
+Response:
+{
+ "action": "media_control",
+ "command": "play"
 }
 
 User: pause music
 Response:
 {
-  "action": "control_media",
-  "command": "pause"
+ "action": "media_control",
+ "command": "pause"
 }
 
-Rules:
-- Never respond with normal text.
-- Only return valid JSON.
-- Keep responses short.
-- If the app requested is not installed, respond with:
+User: next song
+Response:
 {
-  "action": "error",
-  "message": "app_not_found"
-}`;
+ "action": "media_control",
+ "command": "next"
+}
+
+If the request is unknown return:
+{
+ "action": "none"
+}
+
+ABSOLUTE RULE:
+Respond ONLY with JSON. No explanations.`;
       }
 
       const sessionPromise = getAI().live.connect({
@@ -161,15 +183,9 @@ Rules:
               sessionPromise.then((session) => {
                 if (!processorRef.current) return;
                 try {
-                  const result = session.sendRealtimeInput({
+                  session.sendRealtimeInput({
                     media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
                   });
-                  // If it returns a promise, catch it
-                  if (result && typeof (result as any).catch === 'function') {
-                    (result as any).catch((err: any) => {
-                      // Ignore websocket closed errors
-                    });
-                  }
                 } catch (err) {
                   // Ignore synchronous websocket closed errors
                 }

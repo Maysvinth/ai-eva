@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check, X } from 'lucide-react';
-import { FloatingWidget } from './components/FloatingWidget';
+import { Play, Pause, Globe, Music, Terminal, Loader2, Link as LinkIcon, Unlink, Check, X, Mic } from 'lucide-react';
 import Peer from 'peerjs';
 
 // Patch PeerJS to prevent unhandled promise rejections from its internal socket
@@ -35,8 +34,38 @@ export function TabletRemote() {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [lastCommand, setLastCommand] = useState<string>('Waiting...');
   const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<any>(null);
+
+  const [pos, setPos] = useState({ x: 20, y: 20 });
+  const dragRef = useRef({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    dragRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: pos.x,
+      initialY: pos.y
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current.isDragging) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    setPos({
+      x: dragRef.current.initialX + dx,
+      y: dragRef.current.initialY + dy
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    dragRef.current.isDragging = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
 
   useEffect(() => {
     // Check if code is in URL
@@ -65,6 +94,7 @@ export function TabletRemote() {
     
     if (action === 'open_app' || action === 'play_music') {
       let appName = (app || '').toLowerCase();
+      setLastCommand(`Opening ${appName}...`);
       const isAndroid = /Android/.test(navigator.userAgent);
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
@@ -125,10 +155,13 @@ export function TabletRemote() {
     }
 
     if (action === 'open_url' && url) {
+      setLastCommand(`Opening URL...`);
       window.open(url, '_blank');
-    } else if (action === 'control_media') {
+    } else if (action === 'media_control') {
+      setLastCommand(`Media: ${command}`);
       console.log('Media control requested:', command);
     } else if (action === 'error') {
+      setLastCommand(`Error: ${message}`);
       setErrorMsg(message || 'Error executing command');
       setTimeout(() => setErrorMsg(''), 5000);
     }
@@ -225,77 +258,60 @@ export function TabletRemote() {
 
   if (status === 'connected') {
     return (
-      <div className="flex flex-col h-screen bg-neutral-950 text-white font-sans p-6 overflow-hidden relative">
-        <FloatingWidget 
-          isConnected={aiState.isConnected}
-          isUserSpeaking={aiState.isUserSpeaking}
-          isAiSpeaking={aiState.isAiSpeaking}
-          voiceName={aiState.voiceName}
-          voiceColor={aiState.voiceColor}
-        />
-
-        <div className="flex items-center justify-between mb-8 pb-4 border-b border-neutral-800">
-          <div className="flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
-            <h1 className="text-xl font-semibold text-cyan-100">Remote Control</h1>
+      <div className="fixed inset-0 pointer-events-none overflow-hidden bg-transparent">
+        <div 
+          className="absolute z-50 flex flex-col bg-black/80 backdrop-blur-md border border-neutral-800 shadow-2xl pointer-events-auto"
+          style={{ 
+            left: pos.x, 
+            top: pos.y, 
+            width: '220px', 
+            height: '120px', 
+            borderRadius: '16px',
+            touchAction: 'none' 
+          }}
+        >
+          {/* Drag Handle / Header */}
+          <div 
+            className="flex items-center justify-between p-3 border-b border-neutral-800 bg-neutral-900/50 cursor-move"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          >
+            <div className="flex items-center gap-2 pointer-events-none">
+              <div className="relative flex items-center justify-center">
+                <div className="w-2.5 h-2.5 rounded-full z-10 bg-emerald-400" />
+                <div className="absolute w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping opacity-75" />
+              </div>
+              <span className="text-xs font-semibold tracking-wider uppercase text-emerald-400">
+                Connected
+              </span>
+            </div>
+            <button 
+              onClick={() => {
+                if (connRef.current) connRef.current.close();
+                if (peerRef.current) peerRef.current.destroy();
+                setStatus('idle');
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="p-1 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-red-400 transition-colors cursor-pointer"
+            >
+              <X size={14} />
+            </button>
           </div>
-          <button 
-            onClick={() => {
-              if (connRef.current) connRef.current.close();
-              if (peerRef.current) peerRef.current.destroy();
-              setStatus('idle');
-            }}
-            className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-          >
-            <Unlink size={20} />
-          </button>
-        </div>
 
-        {errorMsg && (
-          <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-sm text-center animate-in fade-in slide-in-from-top-4">
-            {errorMsg}
+          {/* Widget Body */}
+          <div className="p-3 flex flex-col gap-2 flex-1 justify-center">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full transition-colors duration-300 ${aiState.isUserSpeaking ? 'bg-cyan-500/20 text-cyan-400 shadow-[0_0_10px_rgba(0,255,255,0.3)]' : 'bg-neutral-800 text-neutral-500'}`}>
+                <Mic size={18} className={aiState.isUserSpeaking ? 'animate-pulse' : ''} />
+              </div>
+              <div className="flex flex-col overflow-hidden">
+                <span className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider">Last Command</span>
+                <span className="text-xs text-white truncate font-medium">{lastCommand}</span>
+              </div>
+            </div>
           </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-4">
-          <button 
-            onClick={() => sendCommand('play_music')}
-            className="flex flex-col items-center justify-center gap-3 p-6 bg-neutral-900 border border-neutral-800 rounded-2xl hover:bg-neutral-800 hover:border-cyan-500/50 transition-all"
-          >
-            <Music size={32} className="text-cyan-400" />
-            <span className="font-medium">Play Music</span>
-          </button>
-          
-          <button 
-            onClick={() => {
-              const query = prompt('What do you want to search on YouTube?');
-              if (query) {
-                sendCommand('open_youtube', { details: query });
-              } else {
-                sendCommand('open_youtube');
-              }
-            }}
-            className="flex flex-col items-center justify-center gap-3 p-6 bg-neutral-900 border border-neutral-800 rounded-2xl hover:bg-neutral-800 hover:border-red-500/50 transition-all"
-          >
-            <Play size={32} className="text-red-500" />
-            <span className="font-medium">YouTube</span>
-          </button>
-
-          <button 
-            onClick={() => sendCommand('open_website', { url: 'https://google.com' })}
-            className="flex flex-col items-center justify-center gap-3 p-6 bg-neutral-900 border border-neutral-800 rounded-2xl hover:bg-neutral-800 hover:border-blue-500/50 transition-all"
-          >
-            <Globe size={32} className="text-blue-400" />
-            <span className="font-medium">Browser</span>
-          </button>
-
-          <button 
-            onClick={() => sendCommand('execute_task')}
-            className="flex flex-col items-center justify-center gap-3 p-6 bg-neutral-900 border border-neutral-800 rounded-2xl hover:bg-neutral-800 hover:border-emerald-500/50 transition-all"
-          >
-            <Terminal size={32} className="text-emerald-400" />
-            <span className="font-medium">Run Task</span>
-          </button>
         </div>
       </div>
     );
