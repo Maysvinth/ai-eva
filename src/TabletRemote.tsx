@@ -29,6 +29,11 @@ if (Peer && Peer.prototype) {
   }
 }
 
+const DEVICE_APPS = [
+  'spotify', 'youtube', 'browser', 'instagram', 'twitter', 
+  'facebook', 'maps', 'mail', 'tiktok', 'whatsapp', 'netflix'
+];
+
 export function TabletRemote() {
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -121,6 +126,22 @@ export function TabletRemote() {
             scheme = 'youtube://';
             fallbackUrl = 'https://apps.apple.com/app/youtube-watch-listen-stream/id544007664';
           }
+        } else if (appName === 'instagram') {
+          scheme = 'instagram://';
+        } else if (appName === 'twitter') {
+          scheme = 'twitter://';
+        } else if (appName === 'facebook') {
+          scheme = 'fb://';
+        } else if (appName === 'maps') {
+          scheme = isAndroid ? 'geo:0,0' : 'maps://';
+        } else if (appName === 'mail') {
+          scheme = 'mailto:';
+        } else if (appName === 'tiktok') {
+          scheme = 'tiktok://';
+        } else if (appName === 'whatsapp') {
+          scheme = 'whatsapp://';
+        } else if (appName === 'netflix') {
+          scheme = 'nflx://';
         }
 
         if (scheme) {
@@ -198,6 +219,10 @@ export function TabletRemote() {
 
         conn.on('open', () => {
           setStatus('connected');
+          conn.send({
+            type: 'device_info',
+            apps: DEVICE_APPS
+          });
         });
 
         conn.on('data', (data: any) => {

@@ -58,6 +58,9 @@ export function useGeminiLive() {
       const taskPrompt = localStorage.getItem('taskPrompt') || '';
       const isDeviceConnected = localStorage.getItem('isDeviceConnected') === 'true';
       
+      const deviceAppsStr = localStorage.getItem('deviceApps');
+      const deviceApps = deviceAppsStr ? JSON.parse(deviceAppsStr) : ['spotify', 'youtube', 'browser'];
+      
       let finalInstruction = `PERSONA INSTRUCTIONS:
 ${selectedVoice.instruction}`;
       
@@ -82,10 +85,8 @@ open_url
 media_control
 run_task
 
-APP NAMES:
-spotify
-youtube
-browser
+AVAILABLE APPS ON DEVICE:
+${deviceApps.join('\n')}
 
 Examples:
 

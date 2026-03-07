@@ -118,6 +118,8 @@ export function MainAI() {
         conn.on('data', (data: any) => {
           if (data.type === 'command') {
             handleRemoteCommand(data.command);
+          } else if (data.type === 'device_info') {
+            localStorage.setItem('deviceApps', JSON.stringify(data.apps));
           }
         });
 
