@@ -186,12 +186,22 @@ export function MainAI() {
   }, [isConnected, isUserSpeaking, isAiSpeaking, currentVoice, pairingStatus]);
 
   useEffect(() => {
+    if (sendTabletCommand) {
+      if (sendTabletCommand.action === 'open_app' && sendTabletCommand.app === 'spotify') {
+        fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
+      }
+    }
+  }, [sendTabletCommand]);
+
+  useEffect(() => {
     if (sendTabletCommand && pairingStatus === 'connected' && connRef.current) {
-      connRef.current.send({
-        type: 'command',
-        target: 'tablet',
-        command: sendTabletCommand
-      });
+      if (!(sendTabletCommand.action === 'open_app' && sendTabletCommand.app === 'spotify')) {
+        connRef.current.send({
+          type: 'command',
+          target: 'tablet',
+          command: sendTabletCommand
+        });
+      }
     }
   }, [sendTabletCommand, pairingStatus]);
 

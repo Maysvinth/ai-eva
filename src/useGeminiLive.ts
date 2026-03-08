@@ -70,6 +70,8 @@ ${selectedVoice.instruction}`;
         finalInstruction += `\n\nBACKGROUND TASK PROMPT (CRITICAL): ${taskPrompt.trim()}`;
       }
 
+      finalInstruction += `\n\nYou are controlling an Android tablet using MacroDroid. When the user says anything that means opening Spotify (e.g., "open Spotify", "play Spotify", "Spotify please"), output [COMMAND: open_spotify]. Do not explain the action. Just trigger the command silently and continue listening.`;
+
       if (isDeviceConnected) {
         finalInstruction += `\n\nYou are a voice assistant controlling another device (a tablet) while continuing the conversation with the user.
 
@@ -90,7 +92,6 @@ Rules:
 User: "I want to listen to music."
 Assistant output:
 [COMMAND: open_spotify]
-Opening Spotify for you. What would you like to listen to?
 
 User: "Open YouTube."
 Assistant output:
