@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Modality } from '@google/genai';
+import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { ANIME_VOICES } from './voices';
 
 let aiInstance: GoogleGenAI | null = null;
@@ -70,7 +70,7 @@ ${selectedVoice.instruction}`;
         finalInstruction += `\n\nBACKGROUND TASK PROMPT (CRITICAL): ${taskPrompt.trim()}`;
       }
 
-      finalInstruction += `\n\nYou are controlling an Android tablet using MacroDroid. When the user says anything that means opening Spotify (e.g., "open Spotify", "play Spotify", "Spotify please"), output [COMMAND: open_spotify]. Do not explain the action. Just trigger the command silently and continue listening.`;
+      finalInstruction += `\n\nWhenever the user says anything that means opening Spotify (examples: "open Spotify", "play Spotify", "Spotify please", "start my music", or slang), you must send an HTTP GET request to this URL: http://192.168.1.2:8080/command. To do this, you must call the \`send_macrodroid_command\` tool. The system will execute the HTTP GET request automatically so MacroDroid triggers Spotify. Do not respond with text or explanation — just call the tool silently and continue listening.`;
 
       if (isDeviceConnected) {
         finalInstruction += `\n\nYou are a voice assistant controlling another device (a tablet) while continuing the conversation with the user.
@@ -115,6 +115,20 @@ Always stay active and continue listening for more requests.`;
             voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice.voiceName } },
           },
           systemInstruction: finalInstruction,
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'send_macrodroid_command',
+                  description: 'Send an HTTP GET request to MacroDroid to open Spotify.',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                }
+              ]
+            }
+          ]
         },
         callbacks: {
           onopen: () => {
@@ -167,6 +181,26 @@ Always stay active and continue listening for more requests.`;
           onmessage: async (message) => {
             if (localStorage.getItem('useLaptopAudio') === 'false') return;
             
+            if (message.toolCall) {
+              const functionCalls = message.toolCall.functionCalls;
+              if (functionCalls) {
+                for (const call of functionCalls) {
+                  if (call.name === 'send_macrodroid_command') {
+                    fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
+                    sessionPromise.then(session => {
+                      session.sendToolResponse({
+                        functionResponses: [{
+                          name: call.name,
+                          id: call.id,
+                          response: { result: 'success' }
+                        }]
+                      });
+                    });
+                  }
+                }
+              }
+            }
+
             // Parse text output for companion links or device commands
             const parts = message.serverContent?.modelTurn?.parts;
             if (parts) {
@@ -185,7 +219,8 @@ Always stay active and continue listening for more requests.`;
                         const url = fullCommand.substring('open_website:'.length).trim();
                         parsed = { action: 'open_url', url };
                       } else if (fullCommand === 'open_spotify') {
-                        parsed = { action: 'open_app', app: 'spotify' };
+                        fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
+                        return newText.replace(commandMatch[0], '');
                       } else if (fullCommand === 'open_youtube') {
                         parsed = { action: 'open_app', app: 'youtube' };
                       } else if (fullCommand.startsWith('open_')) {
@@ -225,7 +260,8 @@ Always stay active and continue listening for more requests.`;
                     const url = fullCommand.substring('open_website:'.length).trim();
                     parsed = { action: 'open_url', url };
                   } else if (fullCommand === 'open_spotify') {
-                    parsed = { action: 'open_app', app: 'spotify' };
+                    fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
+                    return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_youtube') {
                     parsed = { action: 'open_app', app: 'youtube' };
                   } else if (fullCommand.startsWith('open_')) {
