@@ -23,6 +23,7 @@ export function useGeminiLive() {
   const [companionText, setCompanionText] = useState('');
   const [sendTabletCommand, setSendTabletCommand] = useState<any>(null);
   
+  const shouldBeConnectedRef = useRef(false);
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -32,6 +33,7 @@ export function useGeminiLive() {
 
   const connect = async (deviceCode?: string) => {
     setIsConnecting(true);
+    shouldBeConnectedRef.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -69,76 +71,39 @@ ${selectedVoice.instruction}`;
       }
 
       if (isDeviceConnected) {
-        finalInstruction = `You are a real-time device controller for a tablet connected to a PC.
+        finalInstruction += `\n\nYou are a voice assistant controlling another device (a tablet) while continuing the conversation with the user.
 
-CRITICAL RULES:
-- Never explain your reasoning.
-- Never say what you think you will do.
-- Never output natural language.
-- Only output a JSON command.
+Rules:
+1. When the user asks to open an app, play music, or open a website, output a command in this format:
 
-Your job is to convert voice commands into instant device actions.
+[COMMAND: action_name]
 
-SUPPORTED ACTIONS:
-open_app
-open_url
-media_control
-run_task
+2. Continue the conversation after sending the command. Never stop listening.
 
-AVAILABLE APPS ON DEVICE:
-${deviceApps.join('\n')}
+3. Commands available:
+- open_spotify
+- open_youtube
+- open_website:<url>
 
-Examples:
+4. Examples:
 
-User: open spotify
-Response:
-{
- "action": "open_app",
- "app": "spotify"
-}
+User: "I want to listen to music."
+Assistant output:
+[COMMAND: open_spotify]
+Opening Spotify for you. What would you like to listen to?
 
-User: open youtube
-Response:
-{
- "action": "open_app",
- "app": "youtube"
-}
+User: "Open YouTube."
+Assistant output:
+[COMMAND: open_youtube]
+YouTube is opening.
 
-User: open browser
-Response:
-{
- "action": "open_app",
- "app": "browser"
-}
+User: "Open google.com"
+Assistant output:
+[COMMAND: open_website:https://google.com]
+Opening the website.
 
-User: play music
-Response:
-{
- "action": "media_control",
- "command": "play"
-}
-
-User: pause music
-Response:
-{
- "action": "media_control",
- "command": "pause"
-}
-
-User: next song
-Response:
-{
- "action": "media_control",
- "command": "next"
-}
-
-If the request is unknown return:
-{
- "action": "none"
-}
-
-ABSOLUTE RULE:
-Respond ONLY with JSON. No explanations.`;
+5. Never disconnect or stop the assistant after sending commands.
+Always stay active and continue listening for more requests.`;
       }
 
       const sessionPromise = getAI().live.connect({
@@ -209,18 +174,29 @@ Respond ONLY with JSON. No explanations.`;
                   setCompanionText(prev => {
                     const newText = prev + part.text;
                     
-                    // Try to parse as JSON
-                    try {
-                      const jsonMatch = newText.match(/\{[\s\S]*\}/);
-                      if (jsonMatch) {
-                        const parsed = JSON.parse(jsonMatch[0]);
-                        if (parsed.action) {
-                          setSendTabletCommand({ ...parsed, ts: Date.now() });
-                          return ''; // Clear after sending
-                        }
+                    // Parse [COMMAND: action_name]
+                    const commandMatch = newText.match(/\[COMMAND:\s*([^\]]+)\]/);
+                    if (commandMatch) {
+                      const fullCommand = commandMatch[1].trim();
+                      let parsed: any = null;
+                      
+                      if (fullCommand.startsWith('open_website:')) {
+                        const url = fullCommand.substring('open_website:'.length).trim();
+                        parsed = { action: 'open_url', url };
+                      } else if (fullCommand === 'open_spotify') {
+                        parsed = { action: 'open_app', app: 'spotify' };
+                      } else if (fullCommand === 'open_youtube') {
+                        parsed = { action: 'open_app', app: 'youtube' };
+                      } else if (fullCommand.startsWith('open_')) {
+                        const app = fullCommand.substring('open_'.length).trim();
+                        parsed = { action: 'open_app', app };
                       }
-                    } catch (e) {
-                      // Not valid JSON yet, wait for more chunks
+                      
+                      if (parsed) {
+                        setSendTabletCommand({ ...parsed, ts: Date.now() });
+                        // Remove the command from the text so it doesn't get parsed again
+                        return newText.replace(commandMatch[0], '');
+                      }
                     }
                     
                     // Auto-open links if they are clearly labeled
@@ -239,16 +215,28 @@ Respond ONLY with JSON. No explanations.`;
             
             if (message.serverContent?.turnComplete) {
               setCompanionText(prev => {
-                try {
-                  const jsonMatch = prev.match(/\{[\s\S]*\}/);
-                  if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    if (parsed.action) {
-                      setSendTabletCommand({ ...parsed, ts: Date.now() });
-                      return '';
-                    }
+                const commandMatch = prev.match(/\[COMMAND:\s*([^\]]+)\]/);
+                if (commandMatch) {
+                  const fullCommand = commandMatch[1].trim();
+                  let parsed: any = null;
+                  
+                  if (fullCommand.startsWith('open_website:')) {
+                    const url = fullCommand.substring('open_website:'.length).trim();
+                    parsed = { action: 'open_url', url };
+                  } else if (fullCommand === 'open_spotify') {
+                    parsed = { action: 'open_app', app: 'spotify' };
+                  } else if (fullCommand === 'open_youtube') {
+                    parsed = { action: 'open_app', app: 'youtube' };
+                  } else if (fullCommand.startsWith('open_')) {
+                    const app = fullCommand.substring('open_'.length).trim();
+                    parsed = { action: 'open_app', app };
                   }
-                } catch (e) {}
+                  
+                  if (parsed) {
+                    setSendTabletCommand({ ...parsed, ts: Date.now() });
+                    return prev.replace(commandMatch[0], '');
+                  }
+                }
                 return prev;
               });
             }
@@ -303,23 +291,36 @@ Respond ONLY with JSON. No explanations.`;
           onclose: () => {
             disconnect();
           },
-          onerror: (error) => {
-            console.error("Live API Error:", error);
+          onerror: (error: any) => {
+            const errMsg = error?.message || String(error);
+            if (!errMsg.includes('WebSocket')) {
+              console.error("Live API Error:", error);
+            }
             disconnect();
           }
         }
       });
       
-      sessionRef.current = await sessionPromise;
+      const session = await sessionPromise;
+      if (!shouldBeConnectedRef.current) {
+        // Disconnect was called while we were connecting
+        try { session.close(); } catch (e) {}
+      } else {
+        sessionRef.current = session;
+      }
       
-    } catch (error) {
-      console.error("Connection failed:", error);
+    } catch (error: any) {
+      const errMsg = error?.message || String(error);
+      if (!errMsg.includes('WebSocket')) {
+        console.error("Connection failed:", error);
+      }
       setIsConnecting(false);
       disconnect();
     }
   };
 
   const disconnect = () => {
+    shouldBeConnectedRef.current = false;
     if (sessionRef.current) {
       try {
         sessionRef.current.close();

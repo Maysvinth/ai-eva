@@ -9,11 +9,17 @@ const originalConsoleWarn = console.warn;
 const originalConsoleLog = console.log;
 
 const shouldSuppress = (args: any[]) => {
-  const msg = typeof args[0] === 'string' ? args[0] : String(args[0] || '');
+  const fullMsg = args.map(arg => {
+    if (typeof arg === 'string') return arg;
+    if (arg instanceof Error) return arg.message;
+    if (arg && typeof arg === 'object' && arg.message) return arg.message;
+    return String(arg);
+  }).join(' ');
+
   return (
-    msg.includes('[vite] failed to connect to websocket') || 
-    msg.includes('WebSocket') ||
-    msg.includes('Lost connection to server') ||
+    fullMsg.includes('[vite] failed to connect to websocket') || 
+    fullMsg.includes('WebSocket') ||
+    fullMsg.includes('Lost connection to server') ||
     (args[0] === 'PeerJS error:' && args[1]?.type === 'network') ||
     (args[0] === 'PeerJS error:' && args[1]?.type === 'peer-unavailable')
   );
@@ -37,11 +43,12 @@ console.log = (...args) => {
 // Also suppress unhandled promise rejections for "WebSocket closed without opened" and other WebSocket errors
 window.addEventListener('unhandledrejection', (event) => {
   const reasonStr = String(event.reason);
+  const msg = event.reason?.message || '';
   if (
     reasonStr.includes('WebSocket') || 
-    (event.reason && event.reason.message && event.reason.message.includes('WebSocket')) ||
+    msg.includes('WebSocket') ||
     reasonStr.includes('peer-unavailable') ||
-    (event.reason && event.reason.type === 'peer-unavailable')
+    event.reason?.type === 'peer-unavailable'
   ) {
     event.preventDefault();
     event.stopPropagation();
