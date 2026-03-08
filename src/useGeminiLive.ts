@@ -70,42 +70,36 @@ ${selectedVoice.instruction}`;
         finalInstruction += `\n\nBACKGROUND TASK PROMPT (CRITICAL): ${taskPrompt.trim()}`;
       }
 
-      finalInstruction += `\n\nWhenever the user says anything that means opening Spotify (examples: "open Spotify", "play Spotify", "Spotify please", "start my music", or slang), you must send an HTTP GET request to this URL: http://192.168.1.2:8080/command. To do this, you must call the \`send_macrodroid_command\` tool. The system will execute the HTTP GET request automatically so MacroDroid triggers Spotify. Do not respond with text or explanation — just call the tool silently and continue listening.`;
+      finalInstruction += `\n\nYou are an AI assistant that controls my tablet using MacroDroid. 
 
-      if (isDeviceConnected) {
-        finalInstruction += `\n\nYou are a voice assistant controlling another device (a tablet) while continuing the conversation with the user.
+Whenever I say a command, you must send an HTTP GET request to the tablet's MacroDroid HTTP server. You understand natural language, casual speech, and slang. You will recognize any variations of my commands.
 
-Rules:
-1. When the user asks to open an app, play music, or open a website, output a command in this format:
+1. **Spotify:**  
+   - Trigger whenever I say anything meaning opening Spotify, playing music, or starting my jams.  
+   - Examples of phrases: "open Spotify", "play my jams", "hit Spotify", "start Spotify", "Spotify please".  
+   - Send GET request to:  
+     http://192.168.1.2:8080/command  
 
-[COMMAND: action_name]
+2. **YouTube:**  
+   - Trigger whenever I say anything meaning opening YouTube.  
+   - Examples of phrases: "open YouTube", "play YT", "YouTube please", "start my video", "hit YouTube".  
+   - Send GET request to:  
+     http://192.168.1.2:8080/youtube  
 
-2. Continue the conversation after sending the command. Never stop listening.
+3. **Any website:**  
+   - Trigger whenever I ask to open a website, any page, or a URL.  
+   - Find the correct URL and use it in the request.  
+   - Send GET request to:  
+     http://192.168.1.2:8080/openurl?url=[FULL_URL]  
+     Example: If I say "open the official BMW Sri Lanka website", send:  
+     http://192.168.1.2:8080/openurl?url=https://www.bmw.lk  
 
-3. Commands available:
-- open_spotify
-- open_youtube
-- open_website:<url>
-
-4. Examples:
-
-User: "I want to listen to music."
-Assistant output:
-[COMMAND: open_spotify]
-
-User: "Open YouTube."
-Assistant output:
-[COMMAND: open_youtube]
-YouTube is opening.
-
-User: "Open google.com"
-Assistant output:
-[COMMAND: open_website:https://google.com]
-Opening the website.
-
-5. Never disconnect or stop the assistant after sending commands.
-Always stay active and continue listening for more requests.`;
-      }
+Rules:  
+- Do not respond with text.  
+- Do not type URLs manually.  
+- Only send the correct HTTP GET request automatically by calling the \`send_macrodroid_command\` tool.  
+- If the request fails, retry silently.  
+- Treat all variations of the command, including slang, as valid triggers.`;
 
       const sessionPromise = getAI().live.connect({
         model: "gemini-2.5-flash-native-audio-preview-12-2025",
@@ -120,10 +114,20 @@ Always stay active and continue listening for more requests.`;
               functionDeclarations: [
                 {
                   name: 'send_macrodroid_command',
-                  description: 'Send an HTTP GET request to MacroDroid to open Spotify.',
+                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, or a website).',
                   parameters: {
                     type: Type.OBJECT,
-                    properties: {}
+                    properties: {
+                      action: {
+                        type: Type.STRING,
+                        description: 'The action to perform: "spotify", "youtube", or "website".'
+                      },
+                      url: {
+                        type: Type.STRING,
+                        description: 'The full URL to open if action is "website".'
+                      }
+                    },
+                    required: ['action']
                   }
                 }
               ]
@@ -186,7 +190,20 @@ Always stay active and continue listening for more requests.`;
               if (functionCalls) {
                 for (const call of functionCalls) {
                   if (call.name === 'send_macrodroid_command') {
-                    fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
+                    const args = call.args as any;
+                    let targetUrl = '';
+                    if (args.action === 'spotify') {
+                      targetUrl = 'http://192.168.1.2:8080/command';
+                    } else if (args.action === 'youtube') {
+                      targetUrl = 'http://192.168.1.2:8080/youtube';
+                    } else if (args.action === 'website' && args.url) {
+                      targetUrl = `http://192.168.1.2:8080/openurl?url=${args.url}`;
+                    }
+
+                    if (targetUrl) {
+                      fetch(targetUrl, { mode: 'no-cors' }).catch(console.error);
+                    }
+
                     sessionPromise.then(session => {
                       session.sendToolResponse({
                         functionResponses: [{
@@ -217,12 +234,14 @@ Always stay active and continue listening for more requests.`;
                       
                       if (fullCommand.startsWith('open_website:')) {
                         const url = fullCommand.substring('open_website:'.length).trim();
-                        parsed = { action: 'open_url', url };
+                        fetch(`http://192.168.1.2:8080/openurl?url=${url}`, { mode: 'no-cors' }).catch(console.error);
+                        return newText.replace(commandMatch[0], '');
                       } else if (fullCommand === 'open_spotify') {
                         fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
                         return newText.replace(commandMatch[0], '');
                       } else if (fullCommand === 'open_youtube') {
-                        parsed = { action: 'open_app', app: 'youtube' };
+                        fetch('http://192.168.1.2:8080/youtube', { mode: 'no-cors' }).catch(console.error);
+                        return newText.replace(commandMatch[0], '');
                       } else if (fullCommand.startsWith('open_')) {
                         const app = fullCommand.substring('open_'.length).trim();
                         parsed = { action: 'open_app', app };
@@ -258,12 +277,14 @@ Always stay active and continue listening for more requests.`;
                   
                   if (fullCommand.startsWith('open_website:')) {
                     const url = fullCommand.substring('open_website:'.length).trim();
-                    parsed = { action: 'open_url', url };
+                    fetch(`http://192.168.1.2:8080/openurl?url=${url}`, { mode: 'no-cors' }).catch(console.error);
+                    return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_spotify') {
                     fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
                     return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_youtube') {
-                    parsed = { action: 'open_app', app: 'youtube' };
+                    fetch('http://192.168.1.2:8080/youtube', { mode: 'no-cors' }).catch(console.error);
+                    return prev.replace(commandMatch[0], '');
                   } else if (fullCommand.startsWith('open_')) {
                     const app = fullCommand.substring('open_'.length).trim();
                     parsed = { action: 'open_app', app };
