@@ -1,65 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Loader2, ExternalLink, Activity, Moon, GripHorizontal, Settings, X, Check, ChevronLeft, ChevronRight, RefreshCw, Smartphone, Copy } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
-import Peer from 'peerjs';
-
-// Patch PeerJS to prevent unhandled promise rejections from its internal socket
-if (Peer && Peer.prototype) {
-  const originalInit = (Peer.prototype as any)._initializeServerConnection;
-  if (originalInit) {
-    (Peer.prototype as any)._initializeServerConnection = function() {
-      if (this._socket && typeof this._socket.start === 'function' && !this._socket.__patched) {
-        const originalStart = this._socket.start;
-        this._socket.start = function() {
-          try {
-            const promise = originalStart.apply(this, arguments);
-            if (promise && typeof promise.catch === 'function') {
-              promise.catch((err: any) => {
-                // Suppress internal unhandled rejection
-              });
-            }
-            return promise;
-          } catch (e) {
-            // Ignore synchronous errors
-          }
-        };
-        this._socket.__patched = true;
-      }
-      return originalInit.apply(this, arguments);
-    };
-  }
-}
-
+import { Mic, MicOff, Loader2, ExternalLink, Activity, Moon, GripHorizontal, Settings, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useGeminiLive } from './useGeminiLive';
 import { ANIME_VOICES } from './voices';
 import { FloatingWidget } from './components/FloatingWidget';
 
-const generatePairingCode = () => {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const numbers = '0123456789';
-  let code = '';
-  for (let i = 0; i < 4; i++) code += letters.charAt(Math.floor(Math.random() * letters.length));
-  code += '-';
-  for (let i = 0; i < 4; i++) code += numbers.charAt(Math.floor(Math.random() * numbers.length));
-  return code;
-};
-
 export function MainAI() {
-  const { isConnected, isConnecting, isAiSpeaking, userVolume, isUserSpeaking, companionText, setCompanionText, connect, disconnect, sendTabletCommand } = useGeminiLive();
+  const { isConnected, isConnecting, isAiSpeaking, userVolume, isUserSpeaking, companionText, setCompanionText, connect, disconnect, aiVolume, setAiVolume } = useGeminiLive();
 
   const [pos, setPos] = useState({ x: 24, y: 24 });
   const dragRef = useRef({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedVoiceId, setSelectedVoiceId] = useState('zephyr-kuudere');
-  const [useLaptopAudio, setUseLaptopAudio] = useState(true);
   const [taskPrompt, setTaskPrompt] = useState('');
   
-  const [myDeviceCode, setMyDeviceCode] = useState('');
-  const [pairingStatus, setPairingStatus] = useState<'idle' | 'waiting' | 'connected' | 'expired'>('idle');
-  const peerRef = useRef<Peer | null>(null);
-  const connRef = useRef<any>(null);
-
-  const [activeTab, setActiveTab] = useState<'voice' | 'device' | 'general'>('voice');
+  const [activeTab, setActiveTab] = useState<'voice' | 'general'>('voice');
 
   const currentVoice = ANIME_VOICES.find(v => v.id === selectedVoiceId) || ANIME_VOICES[0];
 
@@ -67,133 +21,8 @@ export function MainAI() {
     const saved = localStorage.getItem('selectedVoiceId');
     if (saved) setSelectedVoiceId(saved);
     
-    setUseLaptopAudio(localStorage.getItem('useLaptopAudio') !== 'false');
     setTaskPrompt(localStorage.getItem('taskPrompt') || '');
-
-    // Auto-generate and start pairing
-    startPairing();
-    
-    return () => {
-      if (connRef.current) connRef.current.close();
-      if (peerRef.current) peerRef.current.destroy();
-    };
   }, []);
-
-  const startPairing = async () => {
-    try {
-      setPairingStatus('waiting');
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      setMyDeviceCode(code);
-      
-      if (peerRef.current) peerRef.current.destroy();
-      
-      const peerId = `ais-laptop-${code}`;
-      const peer = new Peer(peerId);
-      peerRef.current = peer;
-
-      peer.on('open', (id) => {
-        console.log('Laptop peer ready:', id);
-      });
-
-      peer.on('connection', (conn) => {
-        connRef.current = conn;
-        
-        conn.on('open', () => {
-          setPairingStatus('connected');
-          localStorage.setItem('isDeviceConnected', 'true');
-          
-          // Send initial state
-          conn.send({
-            type: 'state',
-            aiState: {
-              isConnected,
-              isUserSpeaking,
-              isAiSpeaking,
-              voiceName: currentVoice.name,
-              voiceColor: currentVoice.color
-            }
-          });
-        });
-
-        conn.on('data', (data: any) => {
-          if (data.type === 'command') {
-            handleRemoteCommand(data.command);
-          } else if (data.type === 'device_info') {
-            localStorage.setItem('deviceApps', JSON.stringify(data.apps));
-          }
-        });
-
-        conn.on('close', () => {
-          setPairingStatus('idle');
-          localStorage.setItem('isDeviceConnected', 'false');
-          startPairing();
-        });
-      });
-
-      peer.on('disconnected', () => {
-        console.log('PeerJS disconnected, attempting to reconnect...');
-        if (!peer.destroyed) {
-          peer.reconnect();
-        }
-      });
-
-      peer.on('error', (err) => {
-        console.error('PeerJS error:', err);
-        if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
-          // Do not reset pairing status on temporary network errors
-          console.log('Temporary network error, waiting for reconnect...');
-        } else {
-          setPairingStatus('idle');
-          localStorage.setItem('isDeviceConnected', 'false');
-        }
-      });
-      
-    } catch (e) {
-      console.error("Failed to register device", e);
-    }
-  };
-
-  const handleRemoteCommand = (payload: any) => {
-    const { command, url, details } = payload;
-    if (command === 'play_music') {
-      window.open('https://open.spotify.com', '_blank');
-    } else if (command === 'open_youtube') {
-      if (details) {
-        window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(details)}`, '_blank');
-      } else {
-        window.open('https://youtube.com', '_blank');
-      }
-    } else if (command === 'open_website' && url) {
-      window.open(url, '_blank');
-    } else if (command === 'execute_task') {
-      if (!isConnected) connect(myDeviceCode);
-    }
-  };
-
-  useEffect(() => {
-    if (pairingStatus === 'connected' && connRef.current) {
-      connRef.current.send({
-        type: 'state',
-        aiState: {
-          isConnected,
-          isUserSpeaking,
-          isAiSpeaking,
-          voiceName: currentVoice.name,
-          voiceColor: currentVoice.color
-        }
-      });
-    }
-  }, [isConnected, isUserSpeaking, isAiSpeaking, currentVoice, pairingStatus]);
-
-  useEffect(() => {
-    if (sendTabletCommand && pairingStatus === 'connected' && connRef.current) {
-      connRef.current.send({
-        type: 'command',
-        target: 'tablet',
-        command: sendTabletCommand
-      });
-    }
-  }, [sendTabletCommand, pairingStatus]);
 
   const handleVoiceSelect = (id: string) => {
     setSelectedVoiceId(id);
@@ -201,7 +30,7 @@ export function MainAI() {
     if (isConnected) {
       disconnect();
       setTimeout(() => {
-        connect(myDeviceCode);
+        connect();
       }, 500);
     }
   };
@@ -216,11 +45,6 @@ export function MainAI() {
     const currentIndex = ANIME_VOICES.findIndex(v => v.id === selectedVoiceId);
     const nextIndex = currentIndex < ANIME_VOICES.length - 1 ? currentIndex + 1 : 0;
     handleVoiceSelect(ANIME_VOICES[nextIndex].id);
-  };
-
-  const handleUseLaptopAudioToggle = (val: boolean) => {
-    setUseLaptopAudio(val);
-    localStorage.setItem('useLaptopAudio', String(val));
   };
 
   const handleTaskPromptChange = (val: string) => {
@@ -319,7 +143,7 @@ export function MainAI() {
         isConnecting={isConnecting}
         isUserSpeaking={isUserSpeaking}
         isAiSpeaking={isAiSpeaking}
-        onConnect={() => connect(myDeviceCode)}
+        onConnect={() => connect()}
         onDisconnect={disconnect}
         voiceName={currentVoice.name}
         voiceColor={currentVoice.color}
@@ -355,12 +179,6 @@ export function MainAI() {
                 Voice
               </button>
               <button 
-                onClick={() => setActiveTab('device')}
-                className={`flex-1 py-3 text-xs font-semibold uppercase tracking-widest transition-colors ${activeTab === 'device' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-950/20' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50'}`}
-              >
-                Device
-              </button>
-              <button 
                 onClick={() => setActiveTab('general')}
                 className={`flex-1 py-3 text-xs font-semibold uppercase tracking-widest transition-colors ${activeTab === 'general' ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-950/20' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50'}`}
               >
@@ -369,110 +187,23 @@ export function MainAI() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8">
-              {activeTab === 'device' && (
-                <div className="flex flex-col gap-4">
-                  <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">Device Connection</h3>
-                  
-                  <div className="flex flex-col gap-3 p-4 bg-neutral-900/50 border border-neutral-800 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-sm font-medium text-white">Pair Tablet Remote</span>
-                        <span className="text-xs text-neutral-400">Control AI from your tablet</span>
-                      </div>
-                      <Smartphone size={20} className="text-cyan-400" />
-                    </div>
-                    
-                    {pairingStatus === 'connected' ? (
-                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 mt-2">
-                        <div className="flex items-center gap-2 text-emerald-400">
-                          <Check size={16} />
-                          <span className="text-sm font-medium">Tablet Connected</span>
-                        </div>
-                        <button 
-                          onClick={() => {
-                            if (connRef.current) connRef.current.close();
-                            if (peerRef.current) peerRef.current.destroy();
-                            setPairingStatus('idle');
-                            localStorage.setItem('isDeviceConnected', 'false');
-                            startPairing();
-                          }}
-                          className="text-xs text-neutral-400 hover:text-white transition-colors"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-4 mt-2">
-                        <div className="text-xs text-neutral-400 uppercase tracking-widest font-semibold">Pairing Code</div>
-                        
-                        <div className="flex items-center justify-between bg-black/50 border border-neutral-800 rounded-lg p-4">
-                          <span className="text-3xl font-mono tracking-widest font-bold text-white tracking-[0.5em]">{myDeviceCode || '------'}</span>
-                          <button 
-                            onClick={() => {
-                              if (connRef.current) connRef.current.close();
-                              if (peerRef.current) peerRef.current.destroy();
-                              startPairing();
-                            }}
-                            className="p-2 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-                            title="Generate New Code"
-                          >
-                            <RefreshCw size={20} />
-                          </button>
-                        </div>
-
-                        <div className="text-xs text-neutral-400 uppercase tracking-widest font-semibold mt-2">Direct Link & QR</div>
-                        
-                        <div className="flex gap-4 items-center bg-black/30 border border-neutral-800 rounded-lg p-4">
-                          <div className="bg-white p-2 rounded-lg shrink-0">
-                            {myDeviceCode ? (
-                              <QRCodeSVG 
-                                value={`${window.location.origin}/#/tablet?code=${myDeviceCode}`} 
-                                size={80} 
-                                level="L"
-                              />
-                            ) : (
-                              <div className="w-[80px] h-[80px] bg-neutral-200 animate-pulse rounded" />
-                            )}
-                          </div>
-                          <div className="flex flex-col gap-2 w-full overflow-hidden">
-                            <div className="text-xs text-neutral-400">Scan QR or use link:</div>
-                            <div className="flex items-center gap-2">
-                              <input 
-                                type="text" 
-                                readOnly 
-                                value={`${window.location.origin}/#/tablet?code=${myDeviceCode}`}
-                                className="w-full bg-black/50 border border-neutral-700 rounded p-2 text-xs text-neutral-300 outline-none"
-                              />
-                              <button 
-                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/#/tablet?code=${myDeviceCode}`)}
-                                className="p-2 bg-neutral-800 hover:bg-neutral-700 rounded text-neutral-300 transition-colors"
-                                title="Copy Link"
-                              >
-                                <Copy size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3 text-xs text-cyan-200/80">
-                          <strong className="text-cyan-400 block mb-1">Backup Method:</strong>
-                          If the tablet UI is broken, simply open the direct link above in any browser on your tablet to automatically join the session.
-                        </div>
-                        
-                        <div className="flex items-center justify-between text-xs mt-2">
-                          <span className="text-cyan-400 flex items-center gap-1.5">
-                            <Loader2 size={12} className="animate-spin" /> Waiting for tablet...
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
               {activeTab === 'voice' && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">AI Persona</h3>
+                  <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">AI Volume</h3>
+                  <div className="flex items-center gap-4 bg-neutral-900/50 p-4 rounded-xl border border-neutral-800">
+                    <span className="text-neutral-400 text-xs w-8 text-right">{Math.round(aiVolume * 100)}%</span>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="2" 
+                      step="0.1" 
+                      value={aiVolume} 
+                      onChange={(e) => setAiVolume(parseFloat(e.target.value))}
+                      className="flex-1 accent-cyan-500"
+                    />
+                  </div>
+
+                  <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest mt-4">AI Persona</h3>
                   <p className="text-xs text-neutral-400 mb-1">
                     Select an anime persona for the AI. Changing this while connected will briefly disconnect and reconnect the AI.
                   </p>
@@ -508,21 +239,6 @@ export function MainAI() {
                 <div className="flex flex-col gap-4">
                   <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest">General Settings</h3>
                   
-                  <div className="flex flex-col gap-4 p-4 bg-neutral-900/50 border border-neutral-800 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-sm font-medium text-white">Use Laptop Audio</span>
-                        <span className="text-xs text-neutral-400">Capture audio from this device</span>
-                      </div>
-                      <button
-                        onClick={() => handleUseLaptopAudioToggle(!useLaptopAudio)}
-                        className={`w-10 h-5 rounded-full transition-colors relative ${useLaptopAudio ? 'bg-cyan-500' : 'bg-neutral-700'}`}
-                      >
-                        <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${useLaptopAudio ? 'translate-x-5' : 'translate-x-0'}`} />
-                      </button>
-                    </div>
-                  </div>
-
                   <div className="flex flex-col gap-2">
                     <label className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">Background Task Prompt</label>
                     <textarea 
@@ -582,7 +298,7 @@ export function MainAI() {
         </div>
         
         <button
-          onClick={() => isConnected ? disconnect() : connect(myDeviceCode)}
+          onClick={() => isConnected ? disconnect() : connect()}
           disabled={isConnecting}
           className={`p-4 rounded-full transition-all duration-300 ${
             isConnected 
@@ -600,7 +316,7 @@ export function MainAI() {
           <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl p-4 shadow-2xl flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold text-cyan-500 uppercase tracking-widest flex items-center gap-2">
-                <Smartphone size={14} /> Companion Links
+                <ExternalLink size={14} /> Companion Links
               </h3>
               <button 
                 onClick={() => setCompanionText('')}

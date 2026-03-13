@@ -21,17 +21,30 @@ export function useGeminiLive() {
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [userVolume, setUserVolume] = useState(0);
   const [companionText, setCompanionText] = useState('');
-  const [sendTabletCommand, setSendTabletCommand] = useState<any>(null);
   
   const shouldBeConnectedRef = useRef(false);
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const nextStartTimeRef = useRef<number>(0);
+  
+  const [aiVolume, setAiVolume] = useState(() => {
+    const saved = localStorage.getItem('aiVolume');
+    return saved ? parseFloat(saved) : 1;
+  });
 
-  const connect = async (deviceCode?: string) => {
+  // Update gain node when volume changes
+  useEffect(() => {
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = aiVolume;
+    }
+    localStorage.setItem('aiVolume', aiVolume.toString());
+  }, [aiVolume]);
+
+  const connect = async () => {
     setIsConnecting(true);
     shouldBeConnectedRef.current = true;
     try {
@@ -49,6 +62,11 @@ export function useGeminiLive() {
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
       
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = aiVolume;
+      gainNode.connect(audioContext.destination);
+      gainNodeRef.current = gainNode;
+      
       const source = audioContext.createMediaStreamSource(stream);
       const processor = audioContext.createScriptProcessor(2048, 1, 1);
       processorRef.current = processor;
@@ -56,12 +74,7 @@ export function useGeminiLive() {
       const savedVoiceId = localStorage.getItem('selectedVoiceId') || 'zephyr-kuudere';
       const selectedVoice = ANIME_VOICES.find(v => v.id === savedVoiceId) || ANIME_VOICES[0];
       
-      const useLaptopAudio = localStorage.getItem('useLaptopAudio') !== 'false';
       const taskPrompt = localStorage.getItem('taskPrompt') || '';
-      const isDeviceConnected = localStorage.getItem('isDeviceConnected') === 'true';
-      
-      const deviceAppsStr = localStorage.getItem('deviceApps');
-      const deviceApps = deviceAppsStr ? JSON.parse(deviceAppsStr) : ['spotify', 'youtube', 'browser'];
       
       let finalInstruction = `PERSONA INSTRUCTIONS:
 ${selectedVoice.instruction}`;
@@ -99,10 +112,17 @@ Rules:
 - Do not type URLs manually.  
 - Only send the correct HTTP GET request automatically by calling the \`send_macrodroid_command\` tool.  
 - If the request fails, retry silently.  
-- Treat all variations of the command, including slang, as valid triggers.`;
+- Treat all variations of the command, including slang, as valid triggers.
+
+CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
+- You are a highly intelligent, perceptive, and quick-witted AI. Understand complex queries instantly and provide brilliant, accurate answers.
+- When asked a factual question (e.g., about a game, movie, or event), state the answer IMMEDIATELY in the very first sentence.
+- NEVER say "Let me check", "I think", or "Here is the answer". Just state the facts directly and confidently.
+- To ensure lightning-fast response times, keep your spoken replies EXTREMELY short (1-2 sentences maximum).
+- Never use filler words, pleasantries, or long explanations. Get straight to the answer immediately.`;
 
       const sessionPromise = getAI().live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-12-2025",
+        model: "gemini-2.5-flash-native-audio-preview-09-2025",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -131,7 +151,8 @@ Rules:
                   }
                 }
               ]
-            }
+            },
+            { googleSearch: {} }
           ]
         },
         callbacks: {
@@ -183,8 +204,6 @@ Rules:
             processor.connect(audioContext.destination);
           },
           onmessage: async (message) => {
-            if (localStorage.getItem('useLaptopAudio') === 'false') return;
-            
             if (message.toolCall) {
               const functionCalls = message.toolCall.functionCalls;
               if (functionCalls) {
@@ -230,7 +249,6 @@ Rules:
                     const commandMatch = newText.match(/\[COMMAND:\s*([^\]]+)\]/);
                     if (commandMatch) {
                       const fullCommand = commandMatch[1].trim();
-                      let parsed: any = null;
                       
                       if (fullCommand.startsWith('open_website:')) {
                         const url = fullCommand.substring('open_website:'.length).trim();
@@ -241,15 +259,6 @@ Rules:
                         return newText.replace(commandMatch[0], '');
                       } else if (fullCommand === 'open_youtube') {
                         fetch('http://192.168.1.2:8080/youtube', { mode: 'no-cors' }).catch(console.error);
-                        return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand.startsWith('open_')) {
-                        const app = fullCommand.substring('open_'.length).trim();
-                        parsed = { action: 'open_app', app };
-                      }
-                      
-                      if (parsed) {
-                        setSendTabletCommand({ ...parsed, ts: Date.now() });
-                        // Remove the command from the text so it doesn't get parsed again
                         return newText.replace(commandMatch[0], '');
                       }
                     }
@@ -273,7 +282,6 @@ Rules:
                 const commandMatch = prev.match(/\[COMMAND:\s*([^\]]+)\]/);
                 if (commandMatch) {
                   const fullCommand = commandMatch[1].trim();
-                  let parsed: any = null;
                   
                   if (fullCommand.startsWith('open_website:')) {
                     const url = fullCommand.substring('open_website:'.length).trim();
@@ -284,14 +292,6 @@ Rules:
                     return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_youtube') {
                     fetch('http://192.168.1.2:8080/youtube', { mode: 'no-cors' }).catch(console.error);
-                    return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand.startsWith('open_')) {
-                    const app = fullCommand.substring('open_'.length).trim();
-                    parsed = { action: 'open_app', app };
-                  }
-                  
-                  if (parsed) {
-                    setSendTabletCommand({ ...parsed, ts: Date.now() });
                     return prev.replace(commandMatch[0], '');
                   }
                 }
@@ -319,7 +319,11 @@ Rules:
               
               const playSource = audioContextRef.current.createBufferSource();
               playSource.buffer = audioBuffer;
-              playSource.connect(audioContextRef.current.destination);
+              if (gainNodeRef.current) {
+                playSource.connect(gainNodeRef.current);
+              } else {
+                playSource.connect(audioContextRef.current.destination);
+              }
               
               if (nextStartTimeRef.current < audioContextRef.current.currentTime) {
                 nextStartTimeRef.current = audioContextRef.current.currentTime;
@@ -418,9 +422,10 @@ Rules:
     isAiSpeaking,
     userVolume,
     isUserSpeaking: userVolume > 0.02,
+    aiVolume,
+    setAiVolume,
     companionText,
     setCompanionText,
-    sendTabletCommand,
     connect,
     disconnect
   };

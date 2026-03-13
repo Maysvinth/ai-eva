@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Activity, Moon, GripHorizontal, Maximize2, Loader2, Check } from 'lucide-react';
+import { Mic, MicOff, Activity, Moon, GripHorizontal, Loader2, Check } from 'lucide-react';
 
 interface FloatingWidgetProps {
   isConnected: boolean;
@@ -51,41 +51,6 @@ export function FloatingWidget({
     e.currentTarget.releasePointerCapture(e.pointerId);
   };
 
-  const openPiP = async () => {
-    if ('documentPictureInPicture' in window) {
-      try {
-        const pipWindow = await (window as any).documentPictureInPicture.requestWindow({
-          width: 300,
-          height: 200,
-        });
-        
-        // Copy styles
-        [...document.styleSheets].forEach((styleSheet) => {
-          try {
-            const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
-            const style = document.createElement('style');
-            style.textContent = cssRules;
-            pipWindow.document.head.appendChild(style);
-          } catch (e) {
-            if (styleSheet.href) {
-              const link = document.createElement('link');
-              link.rel = 'stylesheet';
-              link.href = styleSheet.href;
-              pipWindow.document.head.appendChild(link);
-            }
-          }
-        });
-
-        window.open(window.location.pathname + '#/widget', 'AIWidget', 'width=280,height=160,resizable=yes');
-      } catch (err) {
-        console.error(err);
-        window.open(window.location.pathname + '#/widget', 'AIWidget', 'width=280,height=160,resizable=yes');
-      }
-    } else {
-      window.open(window.location.pathname + '#/widget', 'AIWidget', 'width=280,height=160,resizable=yes');
-    }
-  };
-
   return (
     <div 
       className="fixed z-50 flex flex-col bg-black/80 backdrop-blur-md border border-neutral-800 rounded-xl shadow-2xl overflow-hidden"
@@ -114,14 +79,6 @@ export function FloatingWidget({
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <button 
-              onClick={(e) => { e.stopPropagation(); openPiP(); }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="p-1.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-cyan-300 transition-colors cursor-pointer"
-              title="Popout Widget (Always on top)"
-            >
-              <Maximize2 size={14} />
-            </button>
             <GripHorizontal size={14} className="text-neutral-500 pointer-events-none" />
           </div>
         </div>
