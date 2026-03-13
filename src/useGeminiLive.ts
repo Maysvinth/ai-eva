@@ -88,24 +88,24 @@ ${selectedVoice.instruction}`;
 Whenever I say a command, you must send an HTTP GET request to the tablet's MacroDroid HTTP server. You understand natural language, casual speech, and slang. You will recognize any variations of my commands.
 
 1. **Spotify:**  
-   - Trigger whenever I say anything meaning opening Spotify, playing music, or starting my jams.  
-   - Examples of phrases: "open Spotify", "play my jams", "hit Spotify", "start Spotify", "Spotify please".  
+   - Trigger whenever I say anything meaning opening Spotify, playing music, or starting my jams. This includes ANY type of slang, or simply saying "play music".
+   - Examples of phrases: "open Spotify", "play my jams", "hit Spotify", "start Spotify", "Spotify please", "play music", "put on some tunes".  
    - Send GET request to:  
-     http://192.168.1.2:8080/command  
+     http://192.168.1.11:8080/spotify  
 
 2. **YouTube:**  
-   - Trigger whenever I say anything meaning opening YouTube.  
-   - Examples of phrases: "open YouTube", "play YT", "YouTube please", "start my video", "hit YouTube".  
+   - Trigger whenever I say anything meaning opening YouTube, watching a video, or starting a clip. This includes ANY type of slang, or simply saying "play a video".
+   - Examples of phrases: "open YouTube", "play YT", "YouTube please", "start my video", "hit YouTube", "play a video", "put on a video".  
    - Send GET request to:  
-     http://192.168.1.2:8080/youtube  
+     http://192.168.1.11:8080/youtube  
 
 3. **Any website:**  
    - Trigger whenever I ask to open a website, any page, or a URL.  
    - Find the correct URL and use it in the request.  
    - Send GET request to:  
-     http://192.168.1.2:8080/openurl?url=[FULL_URL]  
+     http://192.168.1.11:8080/openurl?url=[FULL_URL]  
      Example: If I say "open the official BMW Sri Lanka website", send:  
-     http://192.168.1.2:8080/openurl?url=https://www.bmw.lk  
+     http://192.168.1.11:8080/openurl?url=https://www.bmw.lk  
 
 Rules:  
 - Do not respond with text.  
@@ -212,11 +212,11 @@ CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
                     const args = call.args as any;
                     let targetUrl = '';
                     if (args.action === 'spotify') {
-                      targetUrl = 'http://192.168.1.2:8080/command';
+                      targetUrl = 'http://192.168.1.11:8080/spotify';
                     } else if (args.action === 'youtube') {
-                      targetUrl = 'http://192.168.1.2:8080/youtube';
+                      targetUrl = 'http://192.168.1.11:8080/youtube';
                     } else if (args.action === 'website' && args.url) {
-                      targetUrl = `http://192.168.1.2:8080/openurl?url=${args.url}`;
+                      targetUrl = `http://192.168.1.11:8080/openurl?url=${args.url}`;
                     }
 
                     if (targetUrl) {
@@ -252,13 +252,13 @@ CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
                       
                       if (fullCommand.startsWith('open_website:')) {
                         const url = fullCommand.substring('open_website:'.length).trim();
-                        fetch(`http://192.168.1.2:8080/openurl?url=${url}`, { mode: 'no-cors' }).catch(console.error);
+                        fetch(`http://192.168.1.11:8080/openurl?url=${url}`, { mode: 'no-cors' }).catch(console.error);
                         return newText.replace(commandMatch[0], '');
                       } else if (fullCommand === 'open_spotify') {
-                        fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
+                        fetch('http://192.168.1.11:8080/spotify', { mode: 'no-cors' }).catch(console.error);
                         return newText.replace(commandMatch[0], '');
                       } else if (fullCommand === 'open_youtube') {
-                        fetch('http://192.168.1.2:8080/youtube', { mode: 'no-cors' }).catch(console.error);
+                        fetch('http://192.168.1.11:8080/youtube', { mode: 'no-cors' }).catch(console.error);
                         return newText.replace(commandMatch[0], '');
                       }
                     }
@@ -285,13 +285,13 @@ CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
                   
                   if (fullCommand.startsWith('open_website:')) {
                     const url = fullCommand.substring('open_website:'.length).trim();
-                    fetch(`http://192.168.1.2:8080/openurl?url=${url}`, { mode: 'no-cors' }).catch(console.error);
+                    fetch(`http://192.168.1.11:8080/openurl?url=${url}`, { mode: 'no-cors' }).catch(console.error);
                     return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_spotify') {
-                    fetch('http://192.168.1.2:8080/command', { mode: 'no-cors' }).catch(console.error);
+                    fetch('http://192.168.1.11:8080/spotify', { mode: 'no-cors' }).catch(console.error);
                     return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_youtube') {
-                    fetch('http://192.168.1.2:8080/youtube', { mode: 'no-cors' }).catch(console.error);
+                    fetch('http://192.168.1.11:8080/youtube', { mode: 'no-cors' }).catch(console.error);
                     return prev.replace(commandMatch[0], '');
                   }
                 }
