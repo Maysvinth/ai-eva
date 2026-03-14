@@ -114,16 +114,28 @@ Whenever I say a command, you must send an HTTP GET request to the tablet's Macr
      http://192.168.1.11:8080/openurl?url=https://www.bmw.lk  
 
 5. **Pause Song (Spotify):**
-   - Trigger whenever I say anything meaning pausing the song, stopping the music, or holding playback. This includes ANY type of slang, or simply saying "pause song".
-   - Examples of phrases: "pause song", "stop the music", "hold it", "pause playback", "pause track", "freeze the beat".
+   - Trigger whenever I say anything meaning pausing the song, stopping the music, or holding playback. This includes ANY slang possibly imaginable, or simply saying "pause song".
+   - Examples of phrases: "pause song", "stop the music", "hold it", "pause playback", "pause track", "freeze the beat", "shut it up", "kill the music", "pause it".
    - Send GET request to:
      http://192.168.1.11:8080/pause
 
 6. **Play Song (Spotify):**
-   - Trigger whenever I say anything meaning playing the song, resuming the music, or unpausing. This includes ANY type of slang, or simply saying "play song".
-   - Examples of phrases: "play song", "resume the music", "unpause", "play playback", "play track", "drop the beat".
+   - Trigger whenever I say anything meaning playing the song, resuming the music, or unpausing. This includes ANY slang possibly imaginable, or simply saying "play song".
+   - Examples of phrases: "play song", "resume the music", "unpause", "play playback", "play track", "drop the beat", "start the music", "keep playing", "play it".
    - Send GET request to:
      http://192.168.1.11:8080/play
+
+7. **Previous Song (Spotify):**
+   - Trigger whenever I say anything meaning going back to the previous song, playing the last track, or rewinding. This includes ANY slang possibly imaginable.
+   - Examples of phrases: "previous song", "go back", "last track", "play the previous one", "rewind".
+   - Send GET request to:
+     http://192.168.1.11:8080/previous
+
+8. **Next Song (Spotify):**
+   - Trigger whenever I say anything meaning skipping to the next song, playing the next track, or skipping. This includes ANY slang possibly imaginable.
+   - Examples of phrases: "next song", "skip this", "play the next one", "skip track", "next please".
+   - Send GET request to:
+     http://192.168.1.11:8080/next
 
 Rules:  
 - Do not respond with text.  
@@ -153,13 +165,13 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
               functionDeclarations: [
                 {
                   name: 'send_macrodroid_command',
-                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, pause song, play song, or a website).',
+                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, pause song, play song, previous song, next song, or a website).',
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       action: {
                         type: Type.STRING,
-                        description: 'The action to perform: "spotify", "youtube", "browser", "pause", "play", or "website".'
+                        description: 'The action to perform: "spotify", "youtube", "browser", "pause", "play", "previous", "next", or "website".'
                       },
                       url: {
                         type: Type.STRING,
@@ -240,6 +252,10 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                       targetUrl = 'http://192.168.1.11:8080/pause';
                     } else if (args.action === 'play') {
                       targetUrl = 'http://192.168.1.11:8080/play';
+                    } else if (args.action === 'previous') {
+                      targetUrl = 'http://192.168.1.11:8080/previous';
+                    } else if (args.action === 'next') {
+                      targetUrl = 'http://192.168.1.11:8080/next';
                     } else if (args.action === 'website' && args.url) {
                       targetUrl = `http://192.168.1.11:8080/openurl?url=${args.url}`;
                     }
