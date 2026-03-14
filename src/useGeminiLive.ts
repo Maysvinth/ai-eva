@@ -113,6 +113,18 @@ Whenever I say a command, you must send an HTTP GET request to the tablet's Macr
      Example: If I say "open the official BMW Sri Lanka website", send:  
      http://192.168.1.11:8080/openurl?url=https://www.bmw.lk  
 
+5. **Previous Song (Spotify):**
+   - Trigger whenever I say anything meaning playing the previous song, going back a track, or skipping backwards. This includes ANY type of slang, or simply saying "previous song".
+   - Examples of phrases: "previous song", "go back a track", "play the last song", "skip back", "previous track".
+   - Send GET request to:
+     http://192.168.1.11:8080/previous
+
+6. **Next Song (Spotify):**
+   - Trigger whenever I say anything meaning playing the next song, skipping a track, or going forward. This includes ANY type of slang, or simply saying "next song".
+   - Examples of phrases: "next song", "skip this", "play the next one", "skip track", "next track".
+   - Send GET request to:
+     http://192.168.1.11:8080/next
+
 Rules:  
 - Do not respond with text.  
 - Do not type URLs manually.  
@@ -141,13 +153,13 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
               functionDeclarations: [
                 {
                   name: 'send_macrodroid_command',
-                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, or a website).',
+                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, previous song, next song, or a website).',
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       action: {
                         type: Type.STRING,
-                        description: 'The action to perform: "spotify", "youtube", "browser", or "website".'
+                        description: 'The action to perform: "spotify", "youtube", "browser", "previous", "next", or "website".'
                       },
                       url: {
                         type: Type.STRING,
@@ -224,6 +236,10 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                       targetUrl = 'http://192.168.1.11:8080/youtube';
                     } else if (args.action === 'browser') {
                       targetUrl = 'http://192.168.1.11:8080/browser';
+                    } else if (args.action === 'previous') {
+                      targetUrl = 'http://192.168.1.11:8080/previous';
+                    } else if (args.action === 'next') {
+                      targetUrl = 'http://192.168.1.11:8080/next';
                     } else if (args.action === 'website' && args.url) {
                       targetUrl = `http://192.168.1.11:8080/openurl?url=${args.url}`;
                     }
@@ -285,6 +301,12 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                       } else if (fullCommand === 'open_browser') {
                         sendCommand('http://192.168.1.11:8080/browser');
                         return newText.replace(commandMatch[0], '');
+                      } else if (fullCommand === 'previous_song') {
+                        sendCommand('http://192.168.1.11:8080/previous');
+                        return newText.replace(commandMatch[0], '');
+                      } else if (fullCommand === 'next_song') {
+                        sendCommand('http://192.168.1.11:8080/next');
+                        return newText.replace(commandMatch[0], '');
                       }
                     }
                     
@@ -320,6 +342,12 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                     return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_browser') {
                     sendCommand('http://192.168.1.11:8080/browser');
+                    return prev.replace(commandMatch[0], '');
+                  } else if (fullCommand === 'previous_song') {
+                    sendCommand('http://192.168.1.11:8080/previous');
+                    return prev.replace(commandMatch[0], '');
+                  } else if (fullCommand === 'next_song') {
+                    sendCommand('http://192.168.1.11:8080/next');
                     return prev.replace(commandMatch[0], '');
                   }
                 }
