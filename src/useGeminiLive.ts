@@ -85,42 +85,51 @@ ${selectedVoice.instruction}`;
 
       finalInstruction += `\n\nYou are an AI assistant that controls my tablet using MacroDroid. 
 
-Whenever I say a command, you must INSTANTLY output a specific text command while you speak. You understand natural language, casual speech, and slang. You will recognize any variations of my commands.
+Whenever I say a command, you must send an HTTP GET request to the tablet's MacroDroid HTTP server. You understand natural language, casual speech, and slang. You will recognize any variations of my commands.
 
 1. **Spotify:**  
    - Trigger whenever I say anything meaning opening Spotify, playing music, or starting my jams. This includes ANY type of slang, or simply saying "play music".
    - Examples of phrases: "open Spotify", "play my jams", "hit Spotify", "start Spotify", "Spotify please", "play music", "put on some tunes".  
-   - Output EXACTLY: !S
+   - Send GET request to:  
+     http://192.168.1.11:8080/spotify  
 
 2. **YouTube:**  
    - Trigger whenever I say anything meaning opening YouTube, watching a video, or starting a clip. This includes ANY type of slang, or simply saying "play a video".
    - Examples of phrases: "open YouTube", "play YT", "YouTube please", "start my video", "hit YouTube", "play a video", "put on a video".  
-   - Output EXACTLY: !Y
+   - Send GET request to:  
+     http://192.168.1.11:8080/youtube  
 
 3. **Browser (Chrome):**  
    - Trigger whenever I say anything meaning opening the browser, opening Chrome, or searching the web. This includes ANY type of slang, or simply saying "open browser" or "open chrome".
    - Examples of phrases: "open browser", "open Chrome", "hit the browser", "start Chrome", "browser please", "open the web".  
-   - Output EXACTLY: !B
+   - Send GET request to:  
+     http://192.168.1.11:8080/browser  
 
 4. **Any website:**  
    - Trigger whenever I ask to open a specific website, any page, or a URL.  
    - Find the correct URL and use it in the request.  
-   - Output EXACTLY: !W:FULL_URL
-     Example: If I say "open the official BMW Sri Lanka website", output: !W:https://www.bmw.lk
+   - Send GET request to:  
+     http://192.168.1.11:8080/openurl?url=[FULL_URL]  
+     Example: If I say "open the official BMW Sri Lanka website", send:  
+     http://192.168.1.11:8080/openurl?url=https://www.bmw.lk  
 
 5. **Pause Song (Spotify):**
    - Trigger whenever I say anything meaning pausing the song, stopping the music, or holding playback. This includes ANY type of slang, or simply saying "pause song".
    - Examples of phrases: "pause song", "stop the music", "hold it", "pause playback", "pause track", "freeze the beat".
-   - Output EXACTLY: !P
+   - Send GET request to:
+     http://192.168.1.11:8080/pause
 
 6. **Play Song (Spotify):**
    - Trigger whenever I say anything meaning playing the song, resuming the music, or unpausing. This includes ANY type of slang, or simply saying "play song".
    - Examples of phrases: "play song", "resume the music", "unpause", "play playback", "play track", "drop the beat".
-   - Output EXACTLY: !R
+   - Send GET request to:
+     http://192.168.1.11:8080/play
 
 Rules:  
-- To make the action happen INSTANTLY, you MUST output the exact short text string (e.g., !S or !P) in your response while you are speaking. Do not add extra words to the command.
-- Do not use any tool calls for this. Use the text syntax so it happens instantly!
+- Do not respond with text.  
+- Do not type URLs manually.  
+- Only send the correct HTTP GET request automatically by calling the \`send_macrodroid_command\` tool.  
+- If the request fails, retry silently.  
 - Treat all variations of the command, including slang, as valid triggers.
 
 CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
@@ -140,6 +149,28 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
           },
           systemInstruction: finalInstruction,
           tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'send_macrodroid_command',
+                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, pause song, play song, or a website).',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      action: {
+                        type: Type.STRING,
+                        description: 'The action to perform: "spotify", "youtube", "browser", "pause", "play", or "website".'
+                      },
+                      url: {
+                        type: Type.STRING,
+                        description: 'The full URL to open if action is "website".'
+                      }
+                    },
+                    required: ['action']
+                  }
+                }
+              ]
+            },
             { googleSearch: {} }
           ]
         },
@@ -192,6 +223,49 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
             processor.connect(audioContext.destination);
           },
           onmessage: async (message) => {
+            if (message.toolCall) {
+              const functionCalls = message.toolCall.functionCalls;
+              if (functionCalls) {
+                for (const call of functionCalls) {
+                  if (call.name === 'send_macrodroid_command') {
+                    const args = call.args as any;
+                    let targetUrl = '';
+                    if (args.action === 'spotify') {
+                      targetUrl = 'http://192.168.1.11:8080/spotify';
+                    } else if (args.action === 'youtube') {
+                      targetUrl = 'http://192.168.1.11:8080/youtube';
+                    } else if (args.action === 'browser') {
+                      targetUrl = 'http://192.168.1.11:8080/browser';
+                    } else if (args.action === 'pause') {
+                      targetUrl = 'http://192.168.1.11:8080/pause';
+                    } else if (args.action === 'play') {
+                      targetUrl = 'http://192.168.1.11:8080/play';
+                    } else if (args.action === 'website' && args.url) {
+                      targetUrl = `http://192.168.1.11:8080/openurl?url=${args.url}`;
+                    }
+
+                    if (targetUrl) {
+                      const iframe = document.createElement('iframe');
+                      iframe.style.display = 'none';
+                      iframe.src = targetUrl;
+                      document.body.appendChild(iframe);
+                      setTimeout(() => document.body.removeChild(iframe), 2000);
+                    }
+
+                    sessionPromise.then(session => {
+                      session.sendToolResponse({
+                        functionResponses: [{
+                          name: call.name,
+                          id: call.id,
+                          response: { result: 'success' }
+                        }]
+                      });
+                    });
+                  }
+                }
+              }
+            }
+
             // Helper to send commands without triggering 'Failed to fetch' mixed content errors
             const sendCommand = (url: string) => {
               const iframe = document.createElement('iframe');
