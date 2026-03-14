@@ -116,10 +116,9 @@ Rules:
 
 CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
 - You are a highly intelligent, perceptive, and quick-witted AI. Understand complex queries instantly and provide brilliant, accurate answers.
-- When asked a factual question (e.g., about a game, movie, or event), state the answer IMMEDIATELY in the very first sentence.
-- NEVER say "Let me check", "I think", or "Here is the answer". Just state the facts directly and confidently.
-- To ensure lightning-fast response times, keep your spoken replies EXTREMELY short (1-2 sentences maximum).
-- Never use filler words, pleasantries, or long explanations. Get straight to the answer immediately.`;
+- When asked a factual question (e.g., about a game, movie, or event), state the core answer IMMEDIATELY in the very first sentence.
+- NEVER use filler words, pleasantries, or preamble (e.g., "Let me check", "Sure, I can help", "Here is the answer"). Get straight to the point immediately to ensure lightning-fast response times.
+- Provide a clear, comprehensive, and detailed answer when necessary. Even if the answer is long, ensure it is easy to understand, well-structured, and delivers the most important facts first.`;
 
       const sessionPromise = getAI().live.connect({
         model: "gemini-2.5-flash-native-audio-preview-09-2025",
