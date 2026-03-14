@@ -90,36 +90,36 @@ Whenever I say a command, you must INSTANTLY output a specific text command whil
 1. **Spotify:**  
    - Trigger whenever I say anything meaning opening Spotify, playing music, or starting my jams. This includes ANY type of slang, or simply saying "play music".
    - Examples of phrases: "open Spotify", "play my jams", "hit Spotify", "start Spotify", "Spotify please", "play music", "put on some tunes".  
-   - Output: [COMMAND: open_spotify]
+   - Output: !spotify
 
 2. **YouTube:**  
    - Trigger whenever I say anything meaning opening YouTube, watching a video, or starting a clip. This includes ANY type of slang, or simply saying "play a video".
    - Examples of phrases: "open YouTube", "play YT", "YouTube please", "start my video", "hit YouTube", "play a video", "put on a video".  
-   - Output: [COMMAND: open_youtube]
+   - Output: !youtube
 
 3. **Browser (Chrome):**  
    - Trigger whenever I say anything meaning opening the browser, opening Chrome, or searching the web. This includes ANY type of slang, or simply saying "open browser" or "open chrome".
    - Examples of phrases: "open browser", "open Chrome", "hit the browser", "start Chrome", "browser please", "open the web".  
-   - Output: [COMMAND: open_browser]
+   - Output: !browser
 
 4. **Any website:**  
    - Trigger whenever I ask to open a specific website, any page, or a URL.  
    - Find the correct URL and use it in the request.  
-   - Output: [COMMAND: open_website: FULL_URL]
-     Example: If I say "open the official BMW Sri Lanka website", output: [COMMAND: open_website: https://www.bmw.lk]
+   - Output: !website:FULL_URL
+     Example: If I say "open the official BMW Sri Lanka website", output: !website:https://www.bmw.lk
 
 5. **Pause Song (Spotify):**
    - Trigger whenever I say anything meaning pausing the song, stopping the music, or holding playback. This includes ANY type of slang, or simply saying "pause song".
    - Examples of phrases: "pause song", "stop the music", "hold it", "pause playback", "pause track", "freeze the beat".
-   - Output: [COMMAND: pause_song]
+   - Output: !pause
 
 6. **Play Song (Spotify):**
    - Trigger whenever I say anything meaning playing the song, resuming the music, or unpausing. This includes ANY type of slang, or simply saying "play song".
    - Examples of phrases: "play song", "resume the music", "unpause", "play playback", "play track", "drop the beat".
-   - Output: [COMMAND: play_song]
+   - Output: !play
 
 Rules:  
-- To make the action happen INSTANTLY, you MUST output the exact text string (e.g., [COMMAND: open_spotify]) in your response while you are speaking.
+- To make the action happen INSTANTLY, you MUST output the exact text string (e.g., !spotify) in your response while you are speaking.
 - Do not use any tool calls for this. Use the text syntax so it happens instantly!
 - Treat all variations of the command, including slang, as valid triggers.
 
@@ -209,28 +209,28 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                   setCompanionText(prev => {
                     const newText = prev + part.text;
                     
-                    // Parse [COMMAND: action_name]
-                    const commandMatch = newText.match(/\[COMMAND:\s*([^\]]+)\]/);
+                    // Parse !command
+                    const commandMatch = newText.match(/!(spotify|youtube|browser|pause|play|website:[^\s]+)/);
                     if (commandMatch) {
                       const fullCommand = commandMatch[1].trim();
                       
-                      if (fullCommand.startsWith('open_website:')) {
-                        const url = fullCommand.substring('open_website:'.length).trim();
+                      if (fullCommand.startsWith('website:')) {
+                        const url = fullCommand.substring('website:'.length).trim();
                         sendCommand(`http://192.168.1.11:8080/openurl?url=${url}`);
                         return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'open_spotify') {
+                      } else if (fullCommand === 'spotify') {
                         sendCommand('http://192.168.1.11:8080/spotify');
                         return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'open_youtube') {
+                      } else if (fullCommand === 'youtube') {
                         sendCommand('http://192.168.1.11:8080/youtube');
                         return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'open_browser') {
+                      } else if (fullCommand === 'browser') {
                         sendCommand('http://192.168.1.11:8080/browser');
                         return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'pause_song') {
+                      } else if (fullCommand === 'pause') {
                         sendCommand('http://192.168.1.11:8080/pause');
                         return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'play_song') {
+                      } else if (fullCommand === 'play') {
                         sendCommand('http://192.168.1.11:8080/play');
                         return newText.replace(commandMatch[0], '');
                       }
@@ -252,27 +252,27 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
             
             if (message.serverContent?.turnComplete) {
               setCompanionText(prev => {
-                const commandMatch = prev.match(/\[COMMAND:\s*([^\]]+)\]/);
+                const commandMatch = prev.match(/!(spotify|youtube|browser|pause|play|website:[^\s]+)/);
                 if (commandMatch) {
                   const fullCommand = commandMatch[1].trim();
                   
-                  if (fullCommand.startsWith('open_website:')) {
-                    const url = fullCommand.substring('open_website:'.length).trim();
+                  if (fullCommand.startsWith('website:')) {
+                    const url = fullCommand.substring('website:'.length).trim();
                     sendCommand(`http://192.168.1.11:8080/openurl?url=${url}`);
                     return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'open_spotify') {
+                  } else if (fullCommand === 'spotify') {
                     sendCommand('http://192.168.1.11:8080/spotify');
                     return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'open_youtube') {
+                  } else if (fullCommand === 'youtube') {
                     sendCommand('http://192.168.1.11:8080/youtube');
                     return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'open_browser') {
+                  } else if (fullCommand === 'browser') {
                     sendCommand('http://192.168.1.11:8080/browser');
                     return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'pause_song') {
+                  } else if (fullCommand === 'pause') {
                     sendCommand('http://192.168.1.11:8080/pause');
                     return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'play_song') {
+                  } else if (fullCommand === 'play') {
                     sendCommand('http://192.168.1.11:8080/play');
                     return prev.replace(commandMatch[0], '');
                   }
