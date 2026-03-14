@@ -113,17 +113,17 @@ Whenever I say a command, you must send an HTTP GET request to the tablet's Macr
      Example: If I say "open the official BMW Sri Lanka website", send:  
      http://192.168.1.11:8080/openurl?url=https://www.bmw.lk  
 
-5. **Previous Song (Spotify):**
-   - Trigger whenever I say anything meaning playing the previous song, going back a track, or skipping backwards. This includes ANY type of slang, or simply saying "previous song".
-   - Examples of phrases: "previous song", "go back a track", "play the last song", "skip back", "previous track".
+5. **Pause Song (Spotify):**
+   - Trigger whenever I say anything meaning pausing the song, stopping the music, or holding playback. This includes ANY type of slang, or simply saying "pause song".
+   - Examples of phrases: "pause song", "stop the music", "hold it", "pause playback", "pause track", "freeze the beat".
    - Send GET request to:
-     http://192.168.1.11:8080/previous
+     http://192.168.1.11:8080/pause
 
-6. **Next Song (Spotify):**
-   - Trigger whenever I say anything meaning playing the next song, skipping a track, or going forward. This includes ANY type of slang, or simply saying "next song".
-   - Examples of phrases: "next song", "skip this", "play the next one", "skip track", "next track".
+6. **Play Song (Spotify):**
+   - Trigger whenever I say anything meaning playing the song, resuming the music, or unpausing. This includes ANY type of slang, or simply saying "play song".
+   - Examples of phrases: "play song", "resume the music", "unpause", "play playback", "play track", "drop the beat".
    - Send GET request to:
-     http://192.168.1.11:8080/next
+     http://192.168.1.11:8080/play
 
 Rules:  
 - Do not respond with text.  
@@ -153,13 +153,13 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
               functionDeclarations: [
                 {
                   name: 'send_macrodroid_command',
-                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, previous song, next song, or a website).',
+                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, pause song, play song, or a website).',
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       action: {
                         type: Type.STRING,
-                        description: 'The action to perform: "spotify", "youtube", "browser", "previous", "next", or "website".'
+                        description: 'The action to perform: "spotify", "youtube", "browser", "pause", "play", or "website".'
                       },
                       url: {
                         type: Type.STRING,
@@ -236,10 +236,10 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                       targetUrl = 'http://192.168.1.11:8080/youtube';
                     } else if (args.action === 'browser') {
                       targetUrl = 'http://192.168.1.11:8080/browser';
-                    } else if (args.action === 'previous') {
-                      targetUrl = 'http://192.168.1.11:8080/previous';
-                    } else if (args.action === 'next') {
-                      targetUrl = 'http://192.168.1.11:8080/next';
+                    } else if (args.action === 'pause') {
+                      targetUrl = 'http://192.168.1.11:8080/pause';
+                    } else if (args.action === 'play') {
+                      targetUrl = 'http://192.168.1.11:8080/play';
                     } else if (args.action === 'website' && args.url) {
                       targetUrl = `http://192.168.1.11:8080/openurl?url=${args.url}`;
                     }
@@ -301,11 +301,11 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                       } else if (fullCommand === 'open_browser') {
                         sendCommand('http://192.168.1.11:8080/browser');
                         return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'previous_song') {
-                        sendCommand('http://192.168.1.11:8080/previous');
+                      } else if (fullCommand === 'pause_song') {
+                        sendCommand('http://192.168.1.11:8080/pause');
                         return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'next_song') {
-                        sendCommand('http://192.168.1.11:8080/next');
+                      } else if (fullCommand === 'play_song') {
+                        sendCommand('http://192.168.1.11:8080/play');
                         return newText.replace(commandMatch[0], '');
                       }
                     }
@@ -343,11 +343,11 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                   } else if (fullCommand === 'open_browser') {
                     sendCommand('http://192.168.1.11:8080/browser');
                     return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'previous_song') {
-                    sendCommand('http://192.168.1.11:8080/previous');
+                  } else if (fullCommand === 'pause_song') {
+                    sendCommand('http://192.168.1.11:8080/pause');
                     return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'next_song') {
-                    sendCommand('http://192.168.1.11:8080/next');
+                  } else if (fullCommand === 'play_song') {
+                    sendCommand('http://192.168.1.11:8080/play');
                     return prev.replace(commandMatch[0], '');
                   }
                 }
