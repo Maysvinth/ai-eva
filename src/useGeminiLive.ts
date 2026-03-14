@@ -99,8 +99,14 @@ Whenever I say a command, you must send an HTTP GET request to the tablet's Macr
    - Send GET request to:  
      http://192.168.1.11:8080/youtube  
 
-3. **Any website:**  
-   - Trigger whenever I ask to open a website, any page, or a URL.  
+3. **Browser (Chrome):**  
+   - Trigger whenever I say anything meaning opening the browser, opening Chrome, or searching the web. This includes ANY type of slang, or simply saying "open browser" or "open chrome".
+   - Examples of phrases: "open browser", "open Chrome", "hit the browser", "start Chrome", "browser please", "open the web".  
+   - Send GET request to:  
+     http://192.168.1.11:8080/browser  
+
+4. **Any website:**  
+   - Trigger whenever I ask to open a specific website, any page, or a URL.  
    - Find the correct URL and use it in the request.  
    - Send GET request to:  
      http://192.168.1.11:8080/openurl?url=[FULL_URL]  
@@ -115,6 +121,7 @@ Rules:
 - Treat all variations of the command, including slang, as valid triggers.
 
 CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
+- Speak EXCLUSIVELY in English at all times. Do not use any other languages, even if your persona normally would.
 - You are a highly intelligent, perceptive, and quick-witted AI. Understand complex queries instantly and provide brilliant, accurate answers.
 - When asked a factual question (e.g., about a game, movie, or event), state the core answer IMMEDIATELY in the very first sentence.
 - NEVER use filler words, pleasantries, or preamble (e.g., "Let me check", "Sure, I can help", "Here is the answer"). Get straight to the point immediately to ensure lightning-fast response times.
@@ -133,13 +140,13 @@ CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
               functionDeclarations: [
                 {
                   name: 'send_macrodroid_command',
-                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, or a website).',
+                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, or a website).',
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       action: {
                         type: Type.STRING,
-                        description: 'The action to perform: "spotify", "youtube", or "website".'
+                        description: 'The action to perform: "spotify", "youtube", "browser", or "website".'
                       },
                       url: {
                         type: Type.STRING,
@@ -214,12 +221,18 @@ CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
                       targetUrl = 'http://192.168.1.11:8080/spotify';
                     } else if (args.action === 'youtube') {
                       targetUrl = 'http://192.168.1.11:8080/youtube';
+                    } else if (args.action === 'browser') {
+                      targetUrl = 'http://192.168.1.11:8080/browser';
                     } else if (args.action === 'website' && args.url) {
                       targetUrl = `http://192.168.1.11:8080/openurl?url=${args.url}`;
                     }
 
                     if (targetUrl) {
-                      fetch(targetUrl, { mode: 'no-cors' }).catch(console.error);
+                      const iframe = document.createElement('iframe');
+                      iframe.style.display = 'none';
+                      iframe.src = targetUrl;
+                      document.body.appendChild(iframe);
+                      setTimeout(() => document.body.removeChild(iframe), 2000);
                     }
 
                     sessionPromise.then(session => {
@@ -236,6 +249,15 @@ CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
               }
             }
 
+            // Helper to send commands without triggering 'Failed to fetch' mixed content errors
+            const sendCommand = (url: string) => {
+              const iframe = document.createElement('iframe');
+              iframe.style.display = 'none';
+              iframe.src = url;
+              document.body.appendChild(iframe);
+              setTimeout(() => document.body.removeChild(iframe), 2000);
+            };
+
             // Parse text output for companion links or device commands
             const parts = message.serverContent?.modelTurn?.parts;
             if (parts) {
@@ -251,13 +273,16 @@ CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
                       
                       if (fullCommand.startsWith('open_website:')) {
                         const url = fullCommand.substring('open_website:'.length).trim();
-                        fetch(`http://192.168.1.11:8080/openurl?url=${url}`, { mode: 'no-cors' }).catch(console.error);
+                        sendCommand(`http://192.168.1.11:8080/openurl?url=${url}`);
                         return newText.replace(commandMatch[0], '');
                       } else if (fullCommand === 'open_spotify') {
-                        fetch('http://192.168.1.11:8080/spotify', { mode: 'no-cors' }).catch(console.error);
+                        sendCommand('http://192.168.1.11:8080/spotify');
                         return newText.replace(commandMatch[0], '');
                       } else if (fullCommand === 'open_youtube') {
-                        fetch('http://192.168.1.11:8080/youtube', { mode: 'no-cors' }).catch(console.error);
+                        sendCommand('http://192.168.1.11:8080/youtube');
+                        return newText.replace(commandMatch[0], '');
+                      } else if (fullCommand === 'open_browser') {
+                        sendCommand('http://192.168.1.11:8080/browser');
                         return newText.replace(commandMatch[0], '');
                       }
                     }
@@ -284,13 +309,16 @@ CRITICAL DIRECTIVES FOR INTELLIGENCE & SPEED:
                   
                   if (fullCommand.startsWith('open_website:')) {
                     const url = fullCommand.substring('open_website:'.length).trim();
-                    fetch(`http://192.168.1.11:8080/openurl?url=${url}`, { mode: 'no-cors' }).catch(console.error);
+                    sendCommand(`http://192.168.1.11:8080/openurl?url=${url}`);
                     return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_spotify') {
-                    fetch('http://192.168.1.11:8080/spotify', { mode: 'no-cors' }).catch(console.error);
+                    sendCommand('http://192.168.1.11:8080/spotify');
                     return prev.replace(commandMatch[0], '');
                   } else if (fullCommand === 'open_youtube') {
-                    fetch('http://192.168.1.11:8080/youtube', { mode: 'no-cors' }).catch(console.error);
+                    sendCommand('http://192.168.1.11:8080/youtube');
+                    return prev.replace(commandMatch[0], '');
+                  } else if (fullCommand === 'open_browser') {
+                    sendCommand('http://192.168.1.11:8080/browser');
                     return prev.replace(commandMatch[0], '');
                   }
                 }
