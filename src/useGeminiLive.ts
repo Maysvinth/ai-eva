@@ -81,6 +81,7 @@ export function useGeminiLive() {
 Your job is to understand what app or action the user wants, even if the user uses slang, mixed languages, broken grammar, or indirect phrasing.
 
 Rules:
+- Respond IMMEDIATELY. Be extremely brief. Do not add any conversational filler.
 - The user may speak in any language (English, Sinhala, Tamil, or mixed).
 - The user may use slang, abbreviations, or incomplete sentences.
 - The user may not explicitly say the app name clearly.
@@ -96,7 +97,7 @@ ACTION: PAUSE_YOUTUBE
 - If the user input is related to playing or resuming a YouTube video (play video, resume youtube, start video, etc.), output exactly:
 ACTION: PLAY_YOUTUBE
 
-- If the user input is related to opening Spotify (music, spotify, songs, etc.), output exactly:
+- If the user input is related to opening Spotify (music, spotify, songs, listen to music, play some songs, etc.), output exactly:
 OPEN_APP: SPOTIFY
 
 - If the user input is related to playing the next song on Spotify (skipping, next track, next song, etc.), output exactly:
@@ -150,6 +151,12 @@ Output: OPEN_APP: SPOTIFY
 User: "spotify eka open karanna"
 Output: OPEN_APP: SPOTIFY
 
+User: "i want to listen to music"
+Output: OPEN_APP: SPOTIFY
+
+User: "play some songs"
+Output: OPEN_APP: SPOTIFY
+
 User: "skip this song"
 Output: ACTION: NEXT_SONG
 
@@ -187,7 +194,7 @@ User: "stop the music"
 Output: ACTION: PAUSE_SONG`;
 
       const sessionPromise = getAI().live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-09-2025",
+        model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
