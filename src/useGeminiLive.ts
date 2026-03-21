@@ -76,81 +76,115 @@ export function useGeminiLive() {
       
       const taskPrompt = localStorage.getItem('taskPrompt') || '';
       
-      let finalInstruction = `PERSONA INSTRUCTIONS:
-${selectedVoice.instruction}`;
-      
-      if (taskPrompt.trim()) {
-        finalInstruction += `\n\nBACKGROUND TASK PROMPT (CRITICAL): ${taskPrompt.trim()}`;
-      }
+      let finalInstruction = `You are an intent recognition assistant for a mobile automation system.
 
-      finalInstruction += `\n\nYou are an AI assistant that controls my tablet using MacroDroid. 
+Your job is to understand what app or action the user wants, even if the user uses slang, mixed languages, broken grammar, or indirect phrasing.
 
-Whenever I say a command, you must send an HTTP GET request to the tablet's MacroDroid HTTP server. You understand natural language, casual speech, and slang. You will recognize any variations of my commands.
+Rules:
+- The user may speak in any language (English, Sinhala, Tamil, or mixed).
+- The user may use slang, abbreviations, or incomplete sentences.
+- The user may not explicitly say the app name clearly.
+- You must infer intent from meaning, not exact words.
 
-1. **Spotify:**  
-   - Trigger whenever I say anything meaning opening Spotify, playing music, or starting my jams. This includes ANY type of slang, or simply saying "play music".
-   - Examples of phrases: "open Spotify", "play my jams", "hit Spotify", "start Spotify", "Spotify please", "play music", "put on some tunes".  
-   - Send GET request to:  
-     http://192.168.1.11:8080/spotify  
+Task:
+- If the user input is related to opening YouTube (watching videos, streaming, yt, tube, etc.), output exactly:
+OPEN_APP: YOUTUBE
 
-2. **YouTube:**  
-   - Trigger whenever I say anything meaning opening YouTube, watching a video, or starting a clip. This includes ANY type of slang, or simply saying "play a video".
-   - Examples of phrases: "open YouTube", "play YT", "YouTube please", "start my video", "hit YouTube", "play a video", "put on a video".  
-   - Send GET request to:  
-     http://192.168.1.11:8080/youtube  
+- If the user input is related to pausing a YouTube video (pause video, stop video, wait youtube, etc.), output exactly:
+ACTION: PAUSE_YOUTUBE
 
-3. **Browser (Chrome):**  
-   - Trigger whenever I say anything meaning opening the browser, opening Chrome, or searching the web. This includes ANY type of slang, or simply saying "open browser" or "open chrome".
-   - Examples of phrases: "open browser", "open Chrome", "hit the browser", "start Chrome", "browser please", "open the web".  
-   - Send GET request to:  
-     http://192.168.1.11:8080/browser  
+- If the user input is related to playing or resuming a YouTube video (play video, resume youtube, start video, etc.), output exactly:
+ACTION: PLAY_YOUTUBE
 
-4. **Any website:**  
-   - Trigger whenever I ask to open a specific website, any page, or a URL.  
-   - Find the correct URL and use it in the request.  
-   - Send GET request to:  
-     http://192.168.1.11:8080/openurl?url=[FULL_URL]  
-     Example: If I say "open the official BMW Sri Lanka website", send:  
-     http://192.168.1.11:8080/openurl?url=https://www.bmw.lk  
+- If the user input is related to opening Spotify (music, spotify, songs, etc.), output exactly:
+OPEN_APP: SPOTIFY
 
-5. **Pause Song (Spotify):**
-   - Trigger whenever I say anything meaning pausing the song, stopping the music, or holding playback. This includes ANY slang possibly imaginable, or simply saying "pause song".
-   - Examples of phrases: "pause song", "stop the music", "hold it", "pause playback", "pause track", "freeze the beat", "shut it up", "kill the music", "pause it".
-   - Send GET request to:
-     http://192.168.1.11:8080/pause
+- If the user input is related to playing the next song on Spotify (skipping, next track, next song, etc.), output exactly:
+ACTION: NEXT_SONG
 
-6. **Play Song (Spotify):**
-   - Trigger whenever I say anything meaning playing the song, resuming the music, or unpausing. This includes ANY slang possibly imaginable, or simply saying "play song".
-   - Examples of phrases: "play song", "resume the music", "unpause", "play playback", "play track", "drop the beat", "start the music", "keep playing", "play it".
-   - Send GET request to:
-     http://192.168.1.11:8080/play
+- If the user input is related to playing the previous song on Spotify (going back, last track, previous song, etc.), output exactly:
+ACTION: PREVIOUS_SONG
 
-7. **Previous Song (Spotify):**
-   - Trigger whenever I say anything meaning going back to the previous song, playing the last track, or rewinding. This includes ANY slang possibly imaginable.
-   - Examples of phrases: "previous song", "go back", "last track", "play the previous one", "rewind".
-   - Send GET request to:
-     http://192.168.1.11:8080/previous
+- If the user input is related to playing a song or resuming playback on Spotify (play, resume, start music, etc.), output exactly:
+ACTION: PLAY_SONG
 
-8. **Next Song (Spotify):**
-   - Trigger whenever I say anything meaning skipping to the next song, playing the next track, or skipping. This includes ANY slang possibly imaginable.
-   - Examples of phrases: "next song", "skip this", "play the next one", "skip track", "next please".
-   - Send GET request to:
-     http://192.168.1.11:8080/next
+- If the user input is related to pausing the song on Spotify (pause, stop music, wait, etc.), output exactly:
+ACTION: PAUSE_SONG
 
-Rules:  
-- Do not respond with text.  
-- Do not type URLs manually.  
-- Only send the correct HTTP GET request automatically by calling the \`send_macrodroid_command\` tool.  
-- If the request fails, retry silently.  
-- Treat all variations of the command, including slang, as valid triggers.
+- Only output the command. Do not explain anything.
 
-CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
-- You are a real person having a conversation. NEVER refer to yourself as an AI, an assistant, or a language model.
-- Speak casually and naturally. Use natural human conversational fillers (like "um", "uh", "you know", "like") occasionally to sound completely human. Do not sound robotic, overly formal, or scripted.
-- You MUST use the googleSearch tool to look up real-time information, news, game releases, anime info, and factual questions BEFORE answering. DO NOT rely on your internal knowledge for these topics.
-- NEVER mention that you are searching the web, looking things up, or checking Google. Seamlessly integrate the facts into your conversation as if you already knew them.
-- Speak EXCLUSIVELY in English at all times. Do not use any other languages, even if your persona normally would.
-- When asked a factual question, give the answer directly but naturally. Do not use robotic preambles like "Here is the answer."`;
+Examples:
+User: "put some videos machan"
+Output: OPEN_APP: YOUTUBE
+
+User: "yt eka open karanna"
+Output: OPEN_APP: YOUTUBE
+
+User: "I wanna watch something"
+Output: OPEN_APP: YOUTUBE
+
+User: "open youtube bro"
+Output: OPEN_APP: YOUTUBE
+
+User: "pause the video"
+Output: ACTION: PAUSE_YOUTUBE
+
+User: "video eka nawaththanna"
+Output: ACTION: PAUSE_YOUTUBE
+
+User: "stop youtube"
+Output: ACTION: PAUSE_YOUTUBE
+
+User: "play the video"
+Output: ACTION: PLAY_YOUTUBE
+
+User: "video eka danna"
+Output: ACTION: PLAY_YOUTUBE
+
+User: "resume youtube"
+Output: ACTION: PLAY_YOUTUBE
+
+User: "open spotify"
+Output: OPEN_APP: SPOTIFY
+
+User: "spotify eka open karanna"
+Output: OPEN_APP: SPOTIFY
+
+User: "skip this song"
+Output: ACTION: NEXT_SONG
+
+User: "eelanga sinduwa danna"
+Output: ACTION: NEXT_SONG
+
+User: "next track bro"
+Output: ACTION: NEXT_SONG
+
+User: "play the last song"
+Output: ACTION: PREVIOUS_SONG
+
+User: "kalin sinduwa danna"
+Output: ACTION: PREVIOUS_SONG
+
+User: "go back"
+Output: ACTION: PREVIOUS_SONG
+
+User: "play the song"
+Output: ACTION: PLAY_SONG
+
+User: "sinduwa danna"
+Output: ACTION: PLAY_SONG
+
+User: "resume music"
+Output: ACTION: PLAY_SONG
+
+User: "pause the song"
+Output: ACTION: PAUSE_SONG
+
+User: "sinduwa nawaththanna"
+Output: ACTION: PAUSE_SONG
+
+User: "stop the music"
+Output: ACTION: PAUSE_SONG`;
 
       const sessionPromise = getAI().live.connect({
         model: "gemini-2.5-flash-native-audio-preview-09-2025",
@@ -161,28 +195,6 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
           },
           systemInstruction: finalInstruction,
           tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'send_macrodroid_command',
-                  description: 'Send an HTTP GET request to MacroDroid to control the tablet (e.g., open Spotify, YouTube, Chrome, pause song, play song, previous song, next song, or a website).',
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      action: {
-                        type: Type.STRING,
-                        description: 'The action to perform: "spotify", "youtube", "browser", "pause", "play", "previous", "next", or "website".'
-                      },
-                      url: {
-                        type: Type.STRING,
-                        description: 'The full URL to open if action is "website".'
-                      }
-                    },
-                    required: ['action']
-                  }
-                }
-              ]
-            },
             { googleSearch: {} }
           ]
         },
@@ -235,53 +247,6 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
             processor.connect(audioContext.destination);
           },
           onmessage: async (message) => {
-            if (message.toolCall) {
-              const functionCalls = message.toolCall.functionCalls;
-              if (functionCalls) {
-                for (const call of functionCalls) {
-                  if (call.name === 'send_macrodroid_command') {
-                    const args = call.args as any;
-                    let targetUrl = '';
-                    if (args.action === 'spotify') {
-                      targetUrl = 'http://192.168.1.11:8080/spotify';
-                    } else if (args.action === 'youtube') {
-                      targetUrl = 'http://192.168.1.11:8080/youtube';
-                    } else if (args.action === 'browser') {
-                      targetUrl = 'http://192.168.1.11:8080/browser';
-                    } else if (args.action === 'pause') {
-                      targetUrl = 'http://192.168.1.11:8080/pause';
-                    } else if (args.action === 'play') {
-                      targetUrl = 'http://192.168.1.11:8080/play';
-                    } else if (args.action === 'previous') {
-                      targetUrl = 'http://192.168.1.11:8080/previous';
-                    } else if (args.action === 'next') {
-                      targetUrl = 'http://192.168.1.11:8080/next';
-                    } else if (args.action === 'website' && args.url) {
-                      targetUrl = `http://192.168.1.11:8080/openurl?url=${args.url}`;
-                    }
-
-                    if (targetUrl) {
-                      const iframe = document.createElement('iframe');
-                      iframe.style.display = 'none';
-                      iframe.src = targetUrl;
-                      document.body.appendChild(iframe);
-                      setTimeout(() => document.body.removeChild(iframe), 2000);
-                    }
-
-                    sessionPromise.then(session => {
-                      session.sendToolResponse({
-                        functionResponses: [{
-                          name: call.name,
-                          id: call.id,
-                          response: { result: 'success' }
-                        }]
-                      });
-                    });
-                  }
-                }
-              }
-            }
-
             // Helper to send commands without triggering 'Failed to fetch' mixed content errors
             const sendCommand = (url: string) => {
               const iframe = document.createElement('iframe');
@@ -299,31 +264,44 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
                   setCompanionText(prev => {
                     const newText = prev + part.text;
                     
-                    // Parse !command
-                    const commandMatch = newText.match(/!(S|Y|B|P|R|W:[^\s]+)/i);
-                    if (commandMatch) {
-                      const fullCommand = commandMatch[1].toUpperCase();
-                      
-                      if (fullCommand.startsWith('W:')) {
-                        const url = commandMatch[1].substring(2).trim();
-                        sendCommand(`http://192.168.1.11:8080/openurl?url=${url}`);
-                        return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'S') {
-                        sendCommand('http://192.168.1.11:8080/spotify');
-                        return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'Y') {
-                        sendCommand('http://192.168.1.11:8080/youtube');
-                        return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'B') {
-                        sendCommand('http://192.168.1.11:8080/browser');
-                        return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'P') {
-                        sendCommand('http://192.168.1.11:8080/pause');
-                        return newText.replace(commandMatch[0], '');
-                      } else if (fullCommand === 'R') {
-                        sendCommand('http://192.168.1.11:8080/play');
-                        return newText.replace(commandMatch[0], '');
-                      }
+                    if (newText.includes('OPEN_APP: YOUTUBE')) {
+                      sendCommand('http://192.168.1.8:8080/youtube');
+                      return newText.replace('OPEN_APP: YOUTUBE', '');
+                    }
+                    
+                    if (newText.includes('ACTION: PAUSE_YOUTUBE')) {
+                      sendCommand('http://192.168.1.6:8080/YouTube%20pause');
+                      return newText.replace('ACTION: PAUSE_YOUTUBE', '');
+                    }
+                    
+                    if (newText.includes('ACTION: PLAY_YOUTUBE')) {
+                      sendCommand('http://192.168.1.6:8080/YouTube%20play');
+                      return newText.replace('ACTION: PLAY_YOUTUBE', '');
+                    }
+                    
+                    if (newText.includes('OPEN_APP: SPOTIFY')) {
+                      sendCommand('http://192.168.1.8:8080/spotify');
+                      return newText.replace('OPEN_APP: SPOTIFY', '');
+                    }
+                    
+                    if (newText.includes('ACTION: NEXT_SONG')) {
+                      sendCommand('http://192.168.1.8:8080/next');
+                      return newText.replace('ACTION: NEXT_SONG', '');
+                    }
+                    
+                    if (newText.includes('ACTION: PREVIOUS_SONG')) {
+                      sendCommand('http://192.168.1.8:8080/previous');
+                      return newText.replace('ACTION: PREVIOUS_SONG', '');
+                    }
+                    
+                    if (newText.includes('ACTION: PLAY_SONG')) {
+                      sendCommand('http://192.168.1.8:8080/play');
+                      return newText.replace('ACTION: PLAY_SONG', '');
+                    }
+                    
+                    if (newText.includes('ACTION: PAUSE_SONG')) {
+                      sendCommand('http://192.168.1.8:8080/pause');
+                      return newText.replace('ACTION: PAUSE_SONG', '');
                     }
                     
                     // Auto-open links if they are clearly labeled
@@ -342,32 +320,40 @@ CRITICAL DIRECTIVES FOR HUMAN-LIKE CONVERSATION & ACCURACY:
             
             if (message.serverContent?.turnComplete) {
               setCompanionText(prev => {
-                const commandMatch = prev.match(/!(S|Y|B|P|R|W:[^\s]+)/i);
-                if (commandMatch) {
-                  const fullCommand = commandMatch[1].toUpperCase();
-                  
-                  if (fullCommand.startsWith('W:')) {
-                    const url = commandMatch[1].substring(2).trim();
-                    sendCommand(`http://192.168.1.11:8080/openurl?url=${url}`);
-                    return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'S') {
-                    sendCommand('http://192.168.1.11:8080/spotify');
-                    return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'Y') {
-                    sendCommand('http://192.168.1.11:8080/youtube');
-                    return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'B') {
-                    sendCommand('http://192.168.1.11:8080/browser');
-                    return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'P') {
-                    sendCommand('http://192.168.1.11:8080/pause');
-                    return prev.replace(commandMatch[0], '');
-                  } else if (fullCommand === 'R') {
-                    sendCommand('http://192.168.1.11:8080/play');
-                    return prev.replace(commandMatch[0], '');
-                  }
+                let updatedText = prev;
+                if (updatedText.includes('OPEN_APP: YOUTUBE')) {
+                  sendCommand('http://192.168.1.8:8080/youtube');
+                  updatedText = updatedText.replace('OPEN_APP: YOUTUBE', '');
                 }
-                return prev;
+                if (updatedText.includes('ACTION: PAUSE_YOUTUBE')) {
+                  sendCommand('http://192.168.1.6:8080/YouTube%20pause');
+                  updatedText = updatedText.replace('ACTION: PAUSE_YOUTUBE', '');
+                }
+                if (updatedText.includes('ACTION: PLAY_YOUTUBE')) {
+                  sendCommand('http://192.168.1.6:8080/YouTube%20play');
+                  updatedText = updatedText.replace('ACTION: PLAY_YOUTUBE', '');
+                }
+                if (updatedText.includes('OPEN_APP: SPOTIFY')) {
+                  sendCommand('http://192.168.1.8:8080/spotify');
+                  updatedText = updatedText.replace('OPEN_APP: SPOTIFY', '');
+                }
+                if (updatedText.includes('ACTION: NEXT_SONG')) {
+                  sendCommand('http://192.168.1.8:8080/next');
+                  updatedText = updatedText.replace('ACTION: NEXT_SONG', '');
+                }
+                if (updatedText.includes('ACTION: PREVIOUS_SONG')) {
+                  sendCommand('http://192.168.1.8:8080/previous');
+                  updatedText = updatedText.replace('ACTION: PREVIOUS_SONG', '');
+                }
+                if (updatedText.includes('ACTION: PLAY_SONG')) {
+                  sendCommand('http://192.168.1.8:8080/play');
+                  updatedText = updatedText.replace('ACTION: PLAY_SONG', '');
+                }
+                if (updatedText.includes('ACTION: PAUSE_SONG')) {
+                  sendCommand('http://192.168.1.8:8080/pause');
+                  updatedText = updatedText.replace('ACTION: PAUSE_SONG', '');
+                }
+                return updatedText;
               });
             }
             
