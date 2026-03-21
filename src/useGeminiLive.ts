@@ -247,13 +247,14 @@ Output: ACTION: PAUSE_SONG`;
             processor.connect(audioContext.destination);
           },
           onmessage: async (message) => {
-            // Helper to send commands without triggering 'Failed to fetch' mixed content errors
+            // Helper to send commands to local HTTP servers (like MacroDroid)
             const sendCommand = (url: string) => {
-              const iframe = document.createElement('iframe');
-              iframe.style.display = 'none';
-              iframe.src = url;
-              document.body.appendChild(iframe);
-              setTimeout(() => document.body.removeChild(iframe), 2000);
+              fetch(url, { mode: 'no-cors' })
+                .then(() => console.log(`Command sent to ${url}`))
+                .catch(err => {
+                  console.error(`Failed to send command to ${url}:`, err);
+                  setCompanionText(prev => prev + `\n\n⚠️ Could not send command to ${url}. Your browser blocked it because it's an HTTP link on an HTTPS site. To fix this: Click the site settings icon in your browser's address bar, and allow "Insecure content".`);
+                });
             };
 
             // Parse text output for companion links or device commands
