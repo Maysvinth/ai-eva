@@ -84,114 +84,15 @@ Rules:
 - Respond IMMEDIATELY. Be extremely brief. Do not add any conversational filler.
 - The user may speak in any language (English, Sinhala, Tamil, or mixed).
 - The user may use slang, abbreviations, or incomplete sentences.
-- The user may not explicitly say the app name clearly.
 - You must infer intent from meaning, not exact words.
 
 Task:
-- If the user input is related to opening YouTube (watching videos, streaming, yt, tube, etc.), output exactly:
-OPEN_APP: YOUTUBE
-
-- If the user input is related to pausing a YouTube video (pause video, stop video, wait youtube, etc.), output exactly:
-ACTION: PAUSE_YOUTUBE
-
-- If the user input is related to playing or resuming a YouTube video (play video, resume youtube, start video, etc.), output exactly:
-ACTION: PLAY_YOUTUBE
-
 - If the user input is related to opening Spotify (music, spotify, songs, listen to music, play some songs, etc.), output exactly:
-OPEN_APP: SPOTIFY
+COMMAND: OPEN_SPOTIFY
 
 - If the user input is related to playing the next song on Spotify (skipping, next track, next song, etc.), output exactly:
-ACTION: NEXT_SONG
-
-- If the user input is related to playing the previous song on Spotify (going back, last track, previous song, etc.), output exactly:
-ACTION: PREVIOUS_SONG
-
-- If the user input is related to playing a song or resuming playback on Spotify (play, resume, start music, etc.), output exactly:
-ACTION: PLAY_SONG
-
-- If the user input is related to pausing the song on Spotify (pause, stop music, wait, etc.), output exactly:
-ACTION: PAUSE_SONG
-
-- Only output the command. Do not explain anything.
-
-Examples:
-User: "put some videos machan"
-Output: OPEN_APP: YOUTUBE
-
-User: "yt eka open karanna"
-Output: OPEN_APP: YOUTUBE
-
-User: "I wanna watch something"
-Output: OPEN_APP: YOUTUBE
-
-User: "open youtube bro"
-Output: OPEN_APP: YOUTUBE
-
-User: "pause the video"
-Output: ACTION: PAUSE_YOUTUBE
-
-User: "video eka nawaththanna"
-Output: ACTION: PAUSE_YOUTUBE
-
-User: "stop youtube"
-Output: ACTION: PAUSE_YOUTUBE
-
-User: "play the video"
-Output: ACTION: PLAY_YOUTUBE
-
-User: "video eka danna"
-Output: ACTION: PLAY_YOUTUBE
-
-User: "resume youtube"
-Output: ACTION: PLAY_YOUTUBE
-
-User: "open spotify"
-Output: OPEN_APP: SPOTIFY
-
-User: "spotify eka open karanna"
-Output: OPEN_APP: SPOTIFY
-
-User: "i want to listen to music"
-Output: OPEN_APP: SPOTIFY
-
-User: "play some songs"
-Output: OPEN_APP: SPOTIFY
-
-User: "skip this song"
-Output: ACTION: NEXT_SONG
-
-User: "eelanga sinduwa danna"
-Output: ACTION: NEXT_SONG
-
-User: "next track bro"
-Output: ACTION: NEXT_SONG
-
-User: "play the last song"
-Output: ACTION: PREVIOUS_SONG
-
-User: "kalin sinduwa danna"
-Output: ACTION: PREVIOUS_SONG
-
-User: "go back"
-Output: ACTION: PREVIOUS_SONG
-
-User: "play the song"
-Output: ACTION: PLAY_SONG
-
-User: "sinduwa danna"
-Output: ACTION: PLAY_SONG
-
-User: "resume music"
-Output: ACTION: PLAY_SONG
-
-User: "pause the song"
-Output: ACTION: PAUSE_SONG
-
-User: "sinduwa nawaththanna"
-Output: ACTION: PAUSE_SONG
-
-User: "stop the music"
-Output: ACTION: PAUSE_SONG`;
+COMMAND: NEXT_SONG
+`;
 
       const sessionPromise = getAI().live.connect({
         model: "gemini-2.5-flash-native-audio-preview-12-2025",
@@ -240,7 +141,7 @@ Output: ACTION: PAUSE_SONG`;
                 if (!processorRef.current) return;
                 try {
                   session.sendRealtimeInput({
-                    media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                    audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
                   });
                 } catch (err) {
                   // Ignore synchronous websocket closed errors
@@ -254,16 +155,6 @@ Output: ACTION: PAUSE_SONG`;
             processor.connect(audioContext.destination);
           },
           onmessage: async (message) => {
-            // Helper to send commands to local HTTP servers (like MacroDroid)
-            const sendCommand = (url: string) => {
-              fetch(url, { mode: 'no-cors' })
-                .then(() => console.log(`Command sent to ${url}`))
-                .catch(err => {
-                  console.error(`Failed to send command to ${url}:`, err);
-                  setCompanionText(prev => prev + `\n\n⚠️ Could not send command to ${url}. Your browser blocked it because it's an HTTP link on an HTTPS site. To fix this: Click the site settings icon in your browser's address bar, and allow "Insecure content".`);
-                });
-            };
-
             // Parse text output for companion links or device commands
             const parts = message.serverContent?.modelTurn?.parts;
             if (parts) {
@@ -271,46 +162,6 @@ Output: ACTION: PAUSE_SONG`;
                 if (part.text) {
                   setCompanionText(prev => {
                     const newText = prev + part.text;
-                    
-                    if (newText.includes('OPEN_APP: YOUTUBE')) {
-                      sendCommand('http://192.168.1.8:8080/youtube');
-                      return newText.replace('OPEN_APP: YOUTUBE', '');
-                    }
-                    
-                    if (newText.includes('ACTION: PAUSE_YOUTUBE')) {
-                      sendCommand('http://192.168.1.6:8080/YouTube%20pause');
-                      return newText.replace('ACTION: PAUSE_YOUTUBE', '');
-                    }
-                    
-                    if (newText.includes('ACTION: PLAY_YOUTUBE')) {
-                      sendCommand('http://192.168.1.6:8080/YouTube%20play');
-                      return newText.replace('ACTION: PLAY_YOUTUBE', '');
-                    }
-                    
-                    if (newText.includes('OPEN_APP: SPOTIFY')) {
-                      sendCommand('http://192.168.1.8:8080/spotify');
-                      return newText.replace('OPEN_APP: SPOTIFY', '');
-                    }
-                    
-                    if (newText.includes('ACTION: NEXT_SONG')) {
-                      sendCommand('http://192.168.1.8:8080/next');
-                      return newText.replace('ACTION: NEXT_SONG', '');
-                    }
-                    
-                    if (newText.includes('ACTION: PREVIOUS_SONG')) {
-                      sendCommand('http://192.168.1.8:8080/previous');
-                      return newText.replace('ACTION: PREVIOUS_SONG', '');
-                    }
-                    
-                    if (newText.includes('ACTION: PLAY_SONG')) {
-                      sendCommand('http://192.168.1.8:8080/play');
-                      return newText.replace('ACTION: PLAY_SONG', '');
-                    }
-                    
-                    if (newText.includes('ACTION: PAUSE_SONG')) {
-                      sendCommand('http://192.168.1.8:8080/pause');
-                      return newText.replace('ACTION: PAUSE_SONG', '');
-                    }
                     
                     // Auto-open links if they are clearly labeled
                     if (newText.includes('OPEN ON TABLET:')) {
@@ -320,49 +171,21 @@ Output: ACTION: PAUSE_SONG`;
                         return ''; // Clear after opening
                       }
                     }
+
+                    if (newText.includes('COMMAND: OPEN_SPOTIFY')) {
+                      fetch('http://192.168.1.6:8080/open%20spotify', { mode: 'no-cors' }).catch(console.error);
+                      return '';
+                    }
+
+                    if (newText.includes('COMMAND: NEXT_SONG')) {
+                      fetch('http://192.168.1.6:8080/spotify%20next', { mode: 'no-cors' }).catch(console.error);
+                      return '';
+                    }
+                    
                     return newText;
                   });
                 }
               }
-            }
-            
-            if (message.serverContent?.turnComplete) {
-              setCompanionText(prev => {
-                let updatedText = prev;
-                if (updatedText.includes('OPEN_APP: YOUTUBE')) {
-                  sendCommand('http://192.168.1.8:8080/youtube');
-                  updatedText = updatedText.replace('OPEN_APP: YOUTUBE', '');
-                }
-                if (updatedText.includes('ACTION: PAUSE_YOUTUBE')) {
-                  sendCommand('http://192.168.1.6:8080/YouTube%20pause');
-                  updatedText = updatedText.replace('ACTION: PAUSE_YOUTUBE', '');
-                }
-                if (updatedText.includes('ACTION: PLAY_YOUTUBE')) {
-                  sendCommand('http://192.168.1.6:8080/YouTube%20play');
-                  updatedText = updatedText.replace('ACTION: PLAY_YOUTUBE', '');
-                }
-                if (updatedText.includes('OPEN_APP: SPOTIFY')) {
-                  sendCommand('http://192.168.1.8:8080/spotify');
-                  updatedText = updatedText.replace('OPEN_APP: SPOTIFY', '');
-                }
-                if (updatedText.includes('ACTION: NEXT_SONG')) {
-                  sendCommand('http://192.168.1.8:8080/next');
-                  updatedText = updatedText.replace('ACTION: NEXT_SONG', '');
-                }
-                if (updatedText.includes('ACTION: PREVIOUS_SONG')) {
-                  sendCommand('http://192.168.1.8:8080/previous');
-                  updatedText = updatedText.replace('ACTION: PREVIOUS_SONG', '');
-                }
-                if (updatedText.includes('ACTION: PLAY_SONG')) {
-                  sendCommand('http://192.168.1.8:8080/play');
-                  updatedText = updatedText.replace('ACTION: PLAY_SONG', '');
-                }
-                if (updatedText.includes('ACTION: PAUSE_SONG')) {
-                  sendCommand('http://192.168.1.8:8080/pause');
-                  updatedText = updatedText.replace('ACTION: PAUSE_SONG', '');
-                }
-                return updatedText;
-              });
             }
             
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
