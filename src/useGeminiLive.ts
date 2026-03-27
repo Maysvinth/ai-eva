@@ -206,14 +206,13 @@ Response Guidelines:
                       }
                     }
 
-                    if (updatedText.includes('COMMAND: OPEN_SPOTIFY')) {
-                      fetch('http://192.168.1.6:8080/open%20spotify', { mode: 'no-cors' }).catch(console.error);
-                      updatedText = updatedText.replace('COMMAND: OPEN_SPOTIFY', '').trim();
-                    }
-
-                    if (updatedText.includes('COMMAND: NEXT_SONG')) {
-                      fetch('http://192.168.1.6:8080/spotify%20next', { mode: 'no-cors' }).catch(console.error);
-                      updatedText = updatedText.replace('COMMAND: NEXT_SONG', '').trim();
+                    const spotifyMatch = updatedText.match(/http:\/\/192\.168\.1\.7:8080\/spotify(?:%20(?:play|pause|next|previous))?/);
+                    if (spotifyMatch) {
+                      const matchEndIndex = updatedText.indexOf(spotifyMatch[0]) + spotifyMatch[0].length;
+                      if (matchEndIndex < updatedText.length || message.serverContent?.turnComplete) {
+                        fetch(spotifyMatch[0], { mode: 'no-cors' }).catch(console.error);
+                        updatedText = updatedText.replace(spotifyMatch[0], '').trim();
+                      }
                     }
                     
                     return updatedText;
