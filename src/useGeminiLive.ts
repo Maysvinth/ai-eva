@@ -92,40 +92,37 @@ Rules:
 - If the user asks a general question, answer it brilliantly and quickly.
 - If the user gives a command, output the command FIRST, before anything else.
 
-Task:
-- If the user input is related to opening Spotify (music, spotify, songs, listen to music, play some songs, etc.), output exactly:
-COMMAND: OPEN_SPOTIFY
+*** GLOBAL INTENT OPERATIONAL RULE ***
+Maintain your current personality and previous instructions. You are now equipped with a high-priority "Universal Intent Listener" for Spotify control. 
 
-- If the user input is related to playing the next song on Spotify (skipping, next track, next song, etc.), output exactly:
-COMMAND: NEXT_SONG
+Logic:
+If the user's speech implies ANY intent to control music—regardless of the language used (e.g., Sinhala, English, Spanish, etc.) or the slang used (e.g., "drop the beat," "shush," "rewind that")—you must identify the category and respond with the correct URL on the FIRST LINE.
 
-*** ADDITIONAL OPERATIONAL RULES ***
-Maintain all existing personality traits and instructions exactly as they are. Integrate the following logic for Spotify control:
-
-1. IF the user wants to OPEN or LAUNCH Spotify:
+Categories:
+1. INTENT: START / OPEN APP
+   - Logic: User wants to launch Spotify or start the music app.
    - URL: http://192.168.1.7:8080/spotify
-   - Triggers: "Open Spotify," "Start the music app," "Abre Spotify," "Launch Spotify."
 
-2. IF the user wants to RESUME or PLAY:
+2. INTENT: RESUME / PLAY
+   - Logic: User wants to continue playback or "play" after a pause.
    - URL: http://192.168.1.7:8080/spotify%20play
-   - Triggers: "Play," "Resume," "Unpause," "Keep playing," "Continue."
 
-3. IF the user wants to SKIP to the NEXT song:
-   - URL: http://192.168.1.7:8080/spotify%20next
-   - Triggers: "Next song," "Skip," "Skip this," "Siguiente," "I don't like this song."
-
-4. IF the user wants to play the PREVIOUS track:
-   - URL: http://192.168.1.7:8080/spotify%20previous
-   - Triggers: "Go back," "Previous," "Play the last one," "Rewind."
-
-5. IF the user wants to PAUSE or STOP:
+3. INTENT: PAUSE / STOP / SILENCE
+   - Logic: User wants the music to stop, "wait," "be quiet," or "shut up."
    - URL: http://192.168.1.7:8080/spotify%20pause
-   - Triggers: "Pause," "Stop the music," "Hold on," "Quiet," "Stop Spotify."
 
-Response Style:
-- Always include the correct URL as plain text in your response.
-- Map slang, casual phrases, or other languages to the most logical command above.
-- Keep your current character/tone while acknowledging the action.
+4. INTENT: SKIP / NEXT / DISLIKE
+   - Logic: User wants the next song, to "skip this," or says "I don't like this one."
+   - URL: http://192.168.1.7:8080/spotify%20next
+
+5. INTENT: PREVIOUS / REWIND / GO BACK
+   - Logic: User wants to hear the last song again or "go back."
+   - URL: http://192.168.1.7:8080/spotify%20previous
+
+Response Guidelines:
+- Put the URL on the first line by itself.
+- Keep the acknowledgment extremely short (less than 5 words) for hands-free speed.
+- Do not ask for clarification; choose the most likely intent and fire the URL.
 `;
 
       const sessionPromise = getAI().live.connect({
