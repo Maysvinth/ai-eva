@@ -120,9 +120,10 @@ Categories:
    - URL: http://192.168.1.7:8080/spotify%20previous
 
 Response Guidelines:
-- Put the URL on the first line by itself.
-- Keep the acknowledgment extremely short (less than 5 words) for hands-free speed.
-- Do not ask for clarification; choose the most likely intent and fire the URL.
+- CRITICAL: Output the URL on the VERY FIRST LINE by itself. Do not put ANY text before the URL.
+- Immediately after the URL, add a newline and a 1-2 word acknowledgment (e.g., "Done.", "Playing.").
+- Do not use markdown formatting.
+- Firing the URL first ensures the command executes instantly without failing.
 `;
 
       const sessionPromise = getAI().live.connect({
