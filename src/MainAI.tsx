@@ -326,7 +326,15 @@ export function MainAI() {
               </button>
             </div>
             <div className="text-sm text-neutral-300 whitespace-pre-wrap font-mono bg-black/50 p-3 rounded-lg border border-neutral-800 max-h-48 overflow-y-auto">
-              {companionText}
+              {companionText.split(/(https?:\/\/[^\s]+)/g).map((part, i) => 
+                /(https?:\/\/[^\s]+)/.test(part) ? (
+                  <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline break-all">
+                    {part}
+                  </a>
+                ) : (
+                  <span key={i}>{part}</span>
+                )
+              )}
             </div>
           </div>
         </div>

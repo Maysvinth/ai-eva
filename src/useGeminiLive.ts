@@ -25,6 +25,7 @@ export function useGeminiLive() {
   const shouldBeConnectedRef = useRef(false);
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const playbackContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
@@ -62,13 +63,16 @@ export function useGeminiLive() {
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
       
-      const gainNode = audioContext.createGain();
+      const playbackContext = new AudioContext({ sampleRate: 24000 });
+      playbackContextRef.current = playbackContext;
+      
+      const gainNode = playbackContext.createGain();
       gainNode.gain.value = aiVolume;
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(playbackContext.destination);
       gainNodeRef.current = gainNode;
       
       const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(2048, 1, 1);
+      const processor = audioContext.createScriptProcessor(1024, 1, 1);
       processorRef.current = processor;
       
       const savedVoiceId = localStorage.getItem('selectedVoiceId') || 'zephyr-kuudere';
@@ -76,15 +80,17 @@ export function useGeminiLive() {
       
       const taskPrompt = localStorage.getItem('taskPrompt') || '';
       
-      let finalInstruction = `You are an intent recognition assistant for a mobile automation system.
+      let finalInstruction = `You are a super-intelligent, omniscient AI assistant that knows and understands everything in the world. You are also a lightning-fast intent recognition assistant for a mobile automation system.
 
-Your job is to understand what app or action the user wants, even if the user uses slang, mixed languages, broken grammar, or indirect phrasing.
+Your job is to answer any question brilliantly and accurately, AND to understand what app or action the user wants, even if they use slang, mixed languages, broken grammar, or indirect phrasing.
 
 Rules:
-- Respond IMMEDIATELY. Be extremely brief. Do not add any conversational filler.
+- Respond IMMEDIATELY. Speed is your highest priority.
+- Be concise but highly informative.
 - The user may speak in any language (English, Sinhala, Tamil, or mixed).
 - The user may use slang, abbreviations, or incomplete sentences.
-- You must infer intent from meaning, not exact words.
+- If the user asks a general question, answer it brilliantly and quickly.
+- If the user gives a command, output the command FIRST, before anything else.
 
 Task:
 - If the user input is related to opening Spotify (music, spotify, songs, listen to music, play some songs, etc.), output exactly:
@@ -92,6 +98,34 @@ COMMAND: OPEN_SPOTIFY
 
 - If the user input is related to playing the next song on Spotify (skipping, next track, next song, etc.), output exactly:
 COMMAND: NEXT_SONG
+
+*** ADDITIONAL OPERATIONAL RULES ***
+Maintain all existing personality traits and instructions exactly as they are. Integrate the following logic for Spotify control:
+
+1. IF the user wants to OPEN or LAUNCH Spotify:
+   - URL: http://192.168.1.7:8080/spotify
+   - Triggers: "Open Spotify," "Start the music app," "Abre Spotify," "Launch Spotify."
+
+2. IF the user wants to RESUME or PLAY:
+   - URL: http://192.168.1.7:8080/spotify%20play
+   - Triggers: "Play," "Resume," "Unpause," "Keep playing," "Continue."
+
+3. IF the user wants to SKIP to the NEXT song:
+   - URL: http://192.168.1.7:8080/spotify%20next
+   - Triggers: "Next song," "Skip," "Skip this," "Siguiente," "I don't like this song."
+
+4. IF the user wants to play the PREVIOUS track:
+   - URL: http://192.168.1.7:8080/spotify%20previous
+   - Triggers: "Go back," "Previous," "Play the last one," "Rewind."
+
+5. IF the user wants to PAUSE or STOP:
+   - URL: http://192.168.1.7:8080/spotify%20pause
+   - Triggers: "Pause," "Stop the music," "Hold on," "Quiet," "Stop Spotify."
+
+Response Style:
+- Always include the correct URL as plain text in your response.
+- Map slang, casual phrases, or other languages to the most logical command above.
+- Keep your current character/tone while acknowledging the action.
 `;
 
       const sessionPromise = getAI().live.connect({
@@ -104,7 +138,8 @@ COMMAND: NEXT_SONG
           systemInstruction: finalInstruction,
           tools: [
             { googleSearch: {} }
-          ]
+          ],
+          temperature: 0.4
         },
         callbacks: {
           onopen: () => {
@@ -163,33 +198,35 @@ COMMAND: NEXT_SONG
                   setCompanionText(prev => {
                     const newText = prev + part.text;
                     
+                    let updatedText = newText;
+                    
                     // Auto-open links if they are clearly labeled
-                    if (newText.includes('OPEN ON TABLET:')) {
-                      const urlMatch = newText.match(/https?:\/\/[^\s]+/);
-                      if (urlMatch && (newText.endsWith('\n') || newText.endsWith(' ') || message.serverContent?.turnComplete)) {
+                    if (updatedText.includes('OPEN ON TABLET:')) {
+                      const urlMatch = updatedText.match(/https?:\/\/[^\s]+/);
+                      if (urlMatch && (updatedText.endsWith('\n') || updatedText.endsWith(' ') || message.serverContent?.turnComplete)) {
                         window.open(urlMatch[0], '_blank');
-                        return ''; // Clear after opening
+                        updatedText = updatedText.replace('OPEN ON TABLET:', '').replace(urlMatch[0], '').trim();
                       }
                     }
 
-                    if (newText.includes('COMMAND: OPEN_SPOTIFY')) {
+                    if (updatedText.includes('COMMAND: OPEN_SPOTIFY')) {
                       fetch('http://192.168.1.6:8080/open%20spotify', { mode: 'no-cors' }).catch(console.error);
-                      return '';
+                      updatedText = updatedText.replace('COMMAND: OPEN_SPOTIFY', '').trim();
                     }
 
-                    if (newText.includes('COMMAND: NEXT_SONG')) {
+                    if (updatedText.includes('COMMAND: NEXT_SONG')) {
                       fetch('http://192.168.1.6:8080/spotify%20next', { mode: 'no-cors' }).catch(console.error);
-                      return '';
+                      updatedText = updatedText.replace('COMMAND: NEXT_SONG', '').trim();
                     }
                     
-                    return newText;
+                    return updatedText;
                   });
                 }
               }
             }
             
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64Audio && audioContextRef.current) {
+            if (base64Audio && playbackContextRef.current) {
               setIsAiSpeaking(true);
               
               const binary = atob(base64Audio);
@@ -197,25 +234,29 @@ COMMAND: NEXT_SONG
               for (let i = 0; i < binary.length; i++) {
                 buffer[i] = binary.charCodeAt(i);
               }
-              const pcm16 = new Int16Array(buffer.buffer);
-              const float32 = new Float32Array(pcm16.length);
-              for (let i = 0; i < pcm16.length; i++) {
-                float32[i] = pcm16[i] / 32768;
+              
+              // Use DataView to safely decode Little-Endian PCM16 and prevent static
+              const dataView = new DataView(buffer.buffer);
+              const pcm16Length = Math.floor(binary.length / 2);
+              const float32 = new Float32Array(pcm16Length);
+              for (let i = 0; i < pcm16Length; i++) {
+                float32[i] = dataView.getInt16(i * 2, true) / 32768;
               }
               
-              const audioBuffer = audioContextRef.current.createBuffer(1, float32.length, 24000);
+              const audioBuffer = playbackContextRef.current.createBuffer(1, float32.length, 24000);
               audioBuffer.getChannelData(0).set(float32);
               
-              const playSource = audioContextRef.current.createBufferSource();
+              const playSource = playbackContextRef.current.createBufferSource();
               playSource.buffer = audioBuffer;
               if (gainNodeRef.current) {
                 playSource.connect(gainNodeRef.current);
               } else {
-                playSource.connect(audioContextRef.current.destination);
+                playSource.connect(playbackContextRef.current.destination);
               }
               
-              if (nextStartTimeRef.current < audioContextRef.current.currentTime) {
-                nextStartTimeRef.current = audioContextRef.current.currentTime;
+              if (nextStartTimeRef.current < playbackContextRef.current.currentTime) {
+                // Add a slightly larger buffer delay (200ms) to prevent stuttering from network jitter
+                nextStartTimeRef.current = playbackContextRef.current.currentTime + 0.2;
               }
               
               playSource.start(nextStartTimeRef.current);
@@ -233,8 +274,8 @@ COMMAND: NEXT_SONG
             if (message.serverContent?.interrupted) {
               activeSourcesRef.current.forEach(s => s.stop());
               activeSourcesRef.current.clear();
-              if (audioContextRef.current) {
-                nextStartTimeRef.current = audioContextRef.current.currentTime;
+              if (playbackContextRef.current) {
+                nextStartTimeRef.current = playbackContextRef.current.currentTime;
               }
               setIsAiSpeaking(false);
             }
@@ -244,7 +285,7 @@ COMMAND: NEXT_SONG
           },
           onerror: (error: any) => {
             const errMsg = error?.message || String(error);
-            if (!errMsg.includes('WebSocket')) {
+            if (!errMsg.includes('WebSocket') && !errMsg.includes('Network error') && !errMsg.includes('closed without opened')) {
               console.error("Live API Error:", error);
             }
             disconnect();
@@ -262,7 +303,7 @@ COMMAND: NEXT_SONG
       
     } catch (error: any) {
       const errMsg = error?.message || String(error);
-      if (!errMsg.includes('WebSocket')) {
+      if (!errMsg.includes('WebSocket') && !errMsg.includes('Network error') && !errMsg.includes('closed without opened')) {
         console.error("Connection failed:", error);
       }
       setIsConnecting(false);
@@ -289,6 +330,10 @@ COMMAND: NEXT_SONG
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
+    }
+    if (playbackContextRef.current) {
+      playbackContextRef.current.close();
+      playbackContextRef.current = null;
     }
     activeSourcesRef.current.forEach(s => s.stop());
     activeSourcesRef.current.clear();

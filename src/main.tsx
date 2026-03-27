@@ -19,6 +19,8 @@ const shouldSuppress = (args: any[]) => {
   return (
     fullMsg.includes('[vite] failed to connect to websocket') || 
     fullMsg.includes('WebSocket') ||
+    fullMsg.includes('closed without opened') ||
+    fullMsg.includes('Network error') ||
     fullMsg.includes('Lost connection to server') ||
     (args[0] === 'PeerJS error:' && args[1]?.type === 'network') ||
     (args[0] === 'PeerJS error:' && args[1]?.type === 'peer-unavailable')
@@ -47,6 +49,10 @@ window.addEventListener('unhandledrejection', (event) => {
   if (
     reasonStr.includes('WebSocket') || 
     msg.includes('WebSocket') ||
+    reasonStr.includes('closed without opened') ||
+    msg.includes('closed without opened') ||
+    reasonStr.includes('Network error') ||
+    msg.includes('Network error') ||
     reasonStr.includes('peer-unavailable') ||
     event.reason?.type === 'peer-unavailable'
   ) {
@@ -57,7 +63,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 window.addEventListener('error', (event) => {
   const msg = event.message || '';
-  if (msg.includes('WebSocket') || msg.includes('[vite] failed to connect to websocket')) {
+  if (msg.includes('WebSocket') || msg.includes('closed without opened') || msg.includes('Network error') || msg.includes('[vite] failed to connect to websocket')) {
     event.preventDefault();
     event.stopPropagation();
   }
