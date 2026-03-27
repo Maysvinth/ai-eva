@@ -207,13 +207,39 @@ Response Guidelines:
                       }
                     }
 
-                    const spotifyMatch = updatedText.match(/http:\/\/192\.168\.1\.7:8080\/spotify(?:(?:%20| )(?:play|pause|next|previous))?/i);
-                    if (spotifyMatch) {
-                      const matchEndIndex = updatedText.indexOf(spotifyMatch[0]) + spotifyMatch[0].length;
-                      if (matchEndIndex < updatedText.length || message.serverContent?.turnComplete) {
-                        const fetchUrl = spotifyMatch[0].replace(' ', '%20');
-                        fetch(fetchUrl, { mode: 'no-cors', cache: 'no-store' }).catch(console.error);
-                        updatedText = updatedText.replace(spotifyMatch[0], '').trim();
+                    // Robust Spotify Command Interceptor
+                    let baseIndex = updatedText.indexOf('http://192.168.1.7:8080/spotify');
+                    while (baseIndex !== -1) {
+                      const newlineIndex = updatedText.indexOf('\n', baseIndex);
+                      if (newlineIndex !== -1 || message.serverContent?.turnComplete) {
+                        const endIndex = newlineIndex !== -1 ? newlineIndex : updatedText.length;
+                        const fullLine = updatedText.substring(baseIndex, endIndex);
+                        
+                        let action = '';
+                        const lowerLine = fullLine.toLowerCase();
+                        if (lowerLine.includes('play')) action = '%20play';
+                        else if (lowerLine.includes('pause')) action = '%20pause';
+                        else if (lowerLine.includes('next')) action = '%20next';
+                        else if (lowerLine.includes('previous')) action = '%20previous';
+                        
+                        // Add aggressive cache buster to guarantee it fires every time
+                        const fetchUrl = `http://192.168.1.7:8080/spotify${action}?cb=${Date.now()}_${Math.random().toString(36).substring(7)}`;
+                        
+                        fetch(fetchUrl, { 
+                          method: 'GET',
+                          mode: 'no-cors', 
+                          cache: 'no-store'
+                        }).catch(console.error);
+                        
+                        // Remove the command line and the trailing newline from the chat text
+                        const nextStartIndex = newlineIndex !== -1 ? newlineIndex + 1 : endIndex;
+                        updatedText = updatedText.substring(0, baseIndex) + updatedText.substring(nextStartIndex);
+                        
+                        // Check if there are any other commands in the text
+                        baseIndex = updatedText.indexOf('http://192.168.1.7:8080/spotify');
+                      } else {
+                        // Wait for more text chunks to arrive to complete the line
+                        break;
                       }
                     }
                     
