@@ -207,11 +207,12 @@ Response Guidelines:
                       }
                     }
 
-                    const spotifyMatch = updatedText.match(/http:\/\/192\.168\.1\.7:8080\/spotify(?:%20(?:play|pause|next|previous))?/);
+                    const spotifyMatch = updatedText.match(/http:\/\/192\.168\.1\.7:8080\/spotify(?:(?:%20| )(?:play|pause|next|previous))?/i);
                     if (spotifyMatch) {
                       const matchEndIndex = updatedText.indexOf(spotifyMatch[0]) + spotifyMatch[0].length;
                       if (matchEndIndex < updatedText.length || message.serverContent?.turnComplete) {
-                        fetch(spotifyMatch[0], { mode: 'no-cors' }).catch(console.error);
+                        const fetchUrl = spotifyMatch[0].replace(' ', '%20');
+                        fetch(fetchUrl, { mode: 'no-cors', cache: 'no-store' }).catch(console.error);
                         updatedText = updatedText.replace(spotifyMatch[0], '').trim();
                       }
                     }
