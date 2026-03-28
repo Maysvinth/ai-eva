@@ -205,43 +205,41 @@ Response Guidelines:
                       }
                     }
 
-                    // Robust & Instant Spotify Command Interceptor
-                    // Matches the base URL and anything attached to it until a whitespace
-                    const spotifyRegex = /http:\/\/192\.168\.1\.7:8080\/spotify[^\s]*/i;
-                    
-                    let match = updatedText.match(spotifyRegex);
-                    while (match) {
-                      const matchEndIndex = match.index! + match[0].length;
+                    // Bulletproof line-based parser for Spotify commands
+                    // This handles cases where the AI uses a space instead of %20
+                    let baseIndex = updatedText.indexOf('http://192.168.1.7:8080/spotify');
+                    while (baseIndex !== -1) {
+                      const newlineIndex = updatedText.indexOf('\n', baseIndex);
                       
-                      // Wait until we see a whitespace character after the URL, or the turn completes.
-                      // This guarantees we have the FULL URL and don't fire prematurely.
-                      if (matchEndIndex === updatedText.length && !message.serverContent?.turnComplete) {
-                        break; // Wait for more text chunks
+                      // Wait until we have a full line or the turn is complete
+                      if (newlineIndex !== -1 || message.serverContent?.turnComplete) {
+                        const endIndex = newlineIndex !== -1 ? newlineIndex : updatedText.length;
+                        const fullLine = updatedText.substring(baseIndex, endIndex).toLowerCase();
+                        
+                        let action = '';
+                        if (fullLine.includes('play')) action = '%20play';
+                        else if (fullLine.includes('pause')) action = '%20pause';
+                        else if (fullLine.includes('next')) action = '%20next';
+                        else if (fullLine.includes('previous')) action = '%20previous';
+                        
+                        const fetchUrl = `http://192.168.1.7:8080/spotify${action}`;
+                        
+                        // Use cache: 'no-store' to force a fresh request every time
+                        fetch(fetchUrl, { 
+                          method: 'GET',
+                          mode: 'no-cors', 
+                          cache: 'no-store'
+                        }).catch(console.error);
+                        
+                        // Remove the entire line from the chat text
+                        const nextStartIndex = newlineIndex !== -1 ? newlineIndex + 1 : endIndex;
+                        updatedText = updatedText.substring(0, baseIndex) + updatedText.substring(nextStartIndex).trimStart();
+                        
+                        // Check for any other commands
+                        baseIndex = updatedText.indexOf('http://192.168.1.7:8080/spotify');
+                      } else {
+                        break; // Wait for more text chunks to complete the line
                       }
-
-                      const fullUrl = match[0].toLowerCase();
-                      
-                      let action = '';
-                      if (fullUrl.includes('play')) action = '%20play';
-                      else if (fullUrl.includes('pause')) action = '%20pause';
-                      else if (fullUrl.includes('next')) action = '%20next';
-                      else if (fullUrl.includes('previous')) action = '%20previous';
-                      
-                      // Use cache: 'reload' to bypass browser caching without modifying the URL,
-                      // as query parameters might break simple local servers.
-                      const fetchUrl = `http://192.168.1.7:8080/spotify${action}`;
-                      
-                      fetch(fetchUrl, { 
-                        method: 'GET',
-                        mode: 'no-cors', 
-                        cache: 'reload'
-                      }).catch(console.error);
-                      
-                      // Remove the command from the chat text
-                      updatedText = updatedText.substring(0, match.index!) + updatedText.substring(matchEndIndex).trimStart();
-                      
-                      // Check for any other commands
-                      match = updatedText.match(spotifyRegex);
                     }
                     
                     return updatedText;
