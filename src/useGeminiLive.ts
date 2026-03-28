@@ -205,27 +205,26 @@ Response Guidelines:
                     }
 
                     // Robust & Instant Spotify Command Interceptor
-                    // Matches the base URL, optionally followed by %20 or space and the action, 
-                    // and requires a boundary (space, newline, or end of string) to ensure we don't fire prematurely.
-                    const spotifyRegex = /http:\/\/192\.168\.1\.7:8080\/spotify(?:(?:%20| )(play|pause|next|previous))?(?=\s|$)/i;
+                    // Matches the base URL and anything attached to it until a whitespace
+                    const spotifyRegex = /http:\/\/192\.168\.1\.7:8080\/spotify[^\s]*/i;
                     
                     let match = updatedText.match(spotifyRegex);
                     while (match) {
-                      // If we matched the end of the string but the turn isn't complete, 
-                      // wait for the next chunk to ensure the AI isn't about to type "%20play".
                       const matchEndIndex = match.index! + match[0].length;
+                      
+                      // Wait until we see a whitespace character after the URL, or the turn completes.
+                      // This guarantees we have the FULL URL and don't fire prematurely.
                       if (matchEndIndex === updatedText.length && !message.serverContent?.turnComplete) {
-                        break; // Wait for more text
+                        break; // Wait for more text chunks
                       }
 
-                      const fullMatch = match[0];
-                      const actionGroup = match[1]?.toLowerCase(); // 'play', 'pause', 'next', 'previous', or undefined
+                      const fullUrl = match[0].toLowerCase();
                       
                       let action = '';
-                      if (actionGroup === 'play') action = '%20play';
-                      else if (actionGroup === 'pause') action = '%20pause';
-                      else if (actionGroup === 'next') action = '%20next';
-                      else if (actionGroup === 'previous') action = '%20previous';
+                      if (fullUrl.includes('play')) action = '%20play';
+                      else if (fullUrl.includes('pause')) action = '%20pause';
+                      else if (fullUrl.includes('next')) action = '%20next';
+                      else if (fullUrl.includes('previous')) action = '%20previous';
                       
                       // Add aggressive cache buster to guarantee it fires every time
                       const fetchUrl = `http://192.168.1.7:8080/spotify${action}?cb=${Date.now()}_${Math.random().toString(36).substring(7)}`;
