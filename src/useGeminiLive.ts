@@ -95,35 +95,32 @@ Rules:
 *** GLOBAL INTENT OPERATIONAL RULE ***
 Maintain your current personality and previous instructions. You are now equipped with a high-priority "Universal Intent Listener" for Spotify control. 
 
-Logic:
-If the user's speech implies ANY intent to control music—regardless of the language used (e.g., Sinhala, English, Spanish, etc.) or the slang used (e.g., "drop the beat," "shush," "rewind that")—you must identify the category and respond with the correct URL on the FIRST LINE.
+CRITICAL SPEED & COMPREHENSION LOGIC:
+- You must understand ANY language (English, Sinhala, Tamil, Spanish, etc.), ANY slang ("drop the beat", "shush", "next track", "rewind", "play some tunes"), and ANY mumbled or incomplete sentence.
+- If the user's speech implies EVEN A SLIGHT INTENT to control music, DO NOT ask for clarification. DO NOT hesitate. IMMEDIATELY fire the corresponding URL.
+- ZERO FAILS POLICY: Always assume the user wants to control Spotify if they mention playing, pausing, skipping, or going back.
 
-Categories:
-1. INTENT: START / OPEN APP
-   - Logic: User wants to launch Spotify or start the music app.
+Categories & Exact URLs to output:
+1. INTENT: START / OPEN APP (e.g., "open spotify", "start music")
    - URL: http://192.168.1.7:8080/spotify
 
-2. INTENT: RESUME / PLAY
-   - Logic: User wants to continue playback, "play" after a pause, or says anything related to playing the paused song on Spotify.
+2. INTENT: RESUME / PLAY (e.g., "play", "resume", "continue", "drop the beat")
    - URL: http://192.168.1.7:8080/spotify%20play
 
-3. INTENT: PAUSE / STOP / SILENCE
-   - Logic: User wants the music to stop, "wait," "be quiet," "shut up," or says anything related to pausing the music playing on Spotify.
+3. INTENT: PAUSE / STOP / SILENCE (e.g., "pause", "stop", "shush", "quiet", "shut up")
    - URL: http://192.168.1.7:8080/spotify%20pause
 
-4. INTENT: SKIP / NEXT / DISLIKE
-   - Logic: User wants the next song, to "skip this," says "I don't like this one," or says anything related to playing the next song in Spotify.
+4. INTENT: SKIP / NEXT / DISLIKE (e.g., "next", "skip", "change it", "don't like this")
    - URL: http://192.168.1.7:8080/spotify%20next
 
-5. INTENT: PREVIOUS / REWIND / GO BACK
-   - Logic: User wants to hear the last song again, "go back", or says anything related to playing the previous song on Spotify.
+5. INTENT: PREVIOUS / REWIND / GO BACK (e.g., "previous", "go back", "rewind", "play that again")
    - URL: http://192.168.1.7:8080/spotify%20previous
 
 Response Guidelines:
-- CRITICAL: Output the URL on the VERY FIRST LINE by itself. Do not put ANY text before the URL.
-- Immediately after the URL, add a newline and a 1-2 word acknowledgment (e.g., "Done.", "Playing.").
-- Do not use markdown formatting.
-- Firing the URL first ensures the command executes instantly without failing.
+- CRITICAL: Output the EXACT URL on the VERY FIRST LINE by itself. Do not put ANY text before the URL.
+- IMMEDIATELY after the URL, output a newline character (\n).
+- After the newline, give a 1-2 word acknowledgment (e.g., "Done.", "Playing.").
+- Firing the URL first ensures instant execution. Never fail this.
 `;
 
       const sessionPromise = getAI().live.connect({
@@ -207,40 +204,43 @@ Response Guidelines:
                       }
                     }
 
-                    // Robust Spotify Command Interceptor
-                    let baseIndex = updatedText.indexOf('http://192.168.1.7:8080/spotify');
-                    while (baseIndex !== -1) {
-                      const newlineIndex = updatedText.indexOf('\n', baseIndex);
-                      if (newlineIndex !== -1 || message.serverContent?.turnComplete) {
-                        const endIndex = newlineIndex !== -1 ? newlineIndex : updatedText.length;
-                        const fullLine = updatedText.substring(baseIndex, endIndex);
-                        
-                        let action = '';
-                        const lowerLine = fullLine.toLowerCase();
-                        if (lowerLine.includes('play')) action = '%20play';
-                        else if (lowerLine.includes('pause')) action = '%20pause';
-                        else if (lowerLine.includes('next')) action = '%20next';
-                        else if (lowerLine.includes('previous')) action = '%20previous';
-                        
-                        // Add aggressive cache buster to guarantee it fires every time
-                        const fetchUrl = `http://192.168.1.7:8080/spotify${action}?cb=${Date.now()}_${Math.random().toString(36).substring(7)}`;
-                        
-                        fetch(fetchUrl, { 
-                          method: 'GET',
-                          mode: 'no-cors', 
-                          cache: 'no-store'
-                        }).catch(console.error);
-                        
-                        // Remove the command line and the trailing newline from the chat text
-                        const nextStartIndex = newlineIndex !== -1 ? newlineIndex + 1 : endIndex;
-                        updatedText = updatedText.substring(0, baseIndex) + updatedText.substring(nextStartIndex);
-                        
-                        // Check if there are any other commands in the text
-                        baseIndex = updatedText.indexOf('http://192.168.1.7:8080/spotify');
-                      } else {
-                        // Wait for more text chunks to arrive to complete the line
-                        break;
+                    // Robust & Instant Spotify Command Interceptor
+                    // Matches the base URL, optionally followed by %20 or space and the action, 
+                    // and requires a boundary (space, newline, or end of string) to ensure we don't fire prematurely.
+                    const spotifyRegex = /http:\/\/192\.168\.1\.7:8080\/spotify(?:(?:%20| )(play|pause|next|previous))?(?=\s|$)/i;
+                    
+                    let match = updatedText.match(spotifyRegex);
+                    while (match) {
+                      // If we matched the end of the string but the turn isn't complete, 
+                      // wait for the next chunk to ensure the AI isn't about to type "%20play".
+                      const matchEndIndex = match.index! + match[0].length;
+                      if (matchEndIndex === updatedText.length && !message.serverContent?.turnComplete) {
+                        break; // Wait for more text
                       }
+
+                      const fullMatch = match[0];
+                      const actionGroup = match[1]?.toLowerCase(); // 'play', 'pause', 'next', 'previous', or undefined
+                      
+                      let action = '';
+                      if (actionGroup === 'play') action = '%20play';
+                      else if (actionGroup === 'pause') action = '%20pause';
+                      else if (actionGroup === 'next') action = '%20next';
+                      else if (actionGroup === 'previous') action = '%20previous';
+                      
+                      // Add aggressive cache buster to guarantee it fires every time
+                      const fetchUrl = `http://192.168.1.7:8080/spotify${action}?cb=${Date.now()}_${Math.random().toString(36).substring(7)}`;
+                      
+                      fetch(fetchUrl, { 
+                        method: 'GET',
+                        mode: 'no-cors', 
+                        cache: 'no-store'
+                      }).catch(console.error);
+                      
+                      // Remove the command from the chat text
+                      updatedText = updatedText.substring(0, match.index!) + updatedText.substring(matchEndIndex).trimStart();
+                      
+                      // Check for any other commands
+                      match = updatedText.match(spotifyRegex);
                     }
                     
                     return updatedText;
