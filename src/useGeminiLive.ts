@@ -99,6 +99,7 @@ CRITICAL SPEED & COMPREHENSION LOGIC:
 - You must understand ANY language (English, Sinhala, Tamil, Spanish, etc.), ANY slang ("drop the beat", "shush", "next track", "rewind", "play some tunes"), and ANY mumbled or incomplete sentence.
 - If the user's speech implies EVEN A SLIGHT INTENT to control music, DO NOT ask for clarification. DO NOT hesitate. IMMEDIATELY fire the corresponding URL.
 - ZERO FAILS POLICY: Always assume the user wants to control Spotify if they mention playing, pausing, skipping, or going back.
+- REPEAT COMMANDS: If the user asks to play, pause, or skip multiple times in a row, YOU MUST OUTPUT THE URL EVERY SINGLE TIME. Never say "It's already playing" or "I just did that". ALWAYS fire the URL.
 
 Categories & Exact URLs to output:
 1. INTENT: START / OPEN APP (e.g., "open spotify", "start music")
@@ -226,13 +227,14 @@ Response Guidelines:
                       else if (fullUrl.includes('next')) action = '%20next';
                       else if (fullUrl.includes('previous')) action = '%20previous';
                       
-                      // Add aggressive cache buster to guarantee it fires every time
-                      const fetchUrl = `http://192.168.1.7:8080/spotify${action}?cb=${Date.now()}_${Math.random().toString(36).substring(7)}`;
+                      // Use cache: 'reload' to bypass browser caching without modifying the URL,
+                      // as query parameters might break simple local servers.
+                      const fetchUrl = `http://192.168.1.7:8080/spotify${action}`;
                       
                       fetch(fetchUrl, { 
                         method: 'GET',
                         mode: 'no-cors', 
-                        cache: 'no-store'
+                        cache: 'reload'
                       }).catch(console.error);
                       
                       // Remove the command from the chat text
